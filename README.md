@@ -1,6 +1,6 @@
 # lita-jenkins
 
-TODO: Add a description of the plugin.
+Interact with your Jenkins CI server
 
 ## Installation
 
@@ -12,11 +12,32 @@ gem "lita-jenkins"
 
 ## Configuration
 
-TODO: Describe any configuration attributes the plugin exposes.
+### Required attributes
+
+* `url` (String) - Your Jenkins CI url. Default: `nil`.
+
+### Example
+
+``` ruby
+Lita.configure do |config|
+  config.handlers.jenkins.url = "http://test.com"
+end
+```
 
 ## Usage
 
-TODO: Describe the plugin's features and how to use them.
+```
+ [You] Lita: jenkins list
+[Lita]
+[1] DISA chef_converge
+[2] SUCC deploy
+[3] FAIL build-all
+
+ [You] Lita: jenkins list fail
+[Lita]
+[3] FAIL build-all
+```
+```
 
 ## License
 
