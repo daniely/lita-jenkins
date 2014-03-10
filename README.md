@@ -18,11 +18,16 @@ gem "lita-jenkins"
 
 * `url` (String) - Your Jenkins CI url. Default: `nil`.
 
+### Optional attributes
+
+* `auth` (String) - Your Jenkins CI username and password. Default: `nil`.
+
 ### Example
 
 ``` ruby
 Lita.configure do |config|
-  config.handlers.jenkins.url = "http://test.com"
+  config.handlers.jenkins.url  = "http://test.com"
+  config.handlers.jenkins.auth = "user1:sekret"
 end
 ```
 
