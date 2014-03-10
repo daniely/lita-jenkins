@@ -64,7 +64,7 @@ module Lita
       end
 
       def cache_job_list(jobs)
-        self.class.jobs ||= jobs
+        self.class.jobs = jobs if self.class.jobs.empty?
       end
     end
 
