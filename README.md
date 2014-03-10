@@ -1,5 +1,7 @@
 # lita-jenkins
 
+[![Build Status](https://travis-ci.org/daniely/lita-jenkins.png?branch=master)](https://travis-ci.org/daniely/lita-jenkins)
+
 Interact with your Jenkins CI server
 
 ## Installation
