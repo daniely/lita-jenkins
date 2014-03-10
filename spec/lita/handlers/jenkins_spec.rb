@@ -40,5 +40,14 @@ describe Lita::Handlers::Jenkins, lita_handler: true do
       send_command('jenkins list fail')
       expect(replies.last).to eq("[2] FAIL deploy\n[4] FAIL website\n")
     end
+
+    it 'caches job list' do
+      allow(response).to receive(:status).and_return(200)
+      allow(response).to receive(:body).and_return(api_response)
+      jenkins = Lita::Handlers::Jenkins.new
+      expect(jenkins).to receive(:cache_job_list)
+
+      send_command('jenkins list')
+    end
   end
 end

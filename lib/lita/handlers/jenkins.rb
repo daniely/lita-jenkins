@@ -3,6 +3,10 @@ require 'json'
 module Lita
   module Handlers
     class Jenkins < Handler
+      class << self
+        attr_accessor :jobs
+      end
+
       def self.default_config(config)
         config.url = nil
       end
@@ -28,7 +32,13 @@ module Lita
           reply << format_job(i, state, job_name) if filter_match(filter, text_to_check)
         end
 
+        cache_job_list(parsed_response['jobs'])
+
         response.reply reply
+      end
+
+      def jobs
+        self.class.jobs
       end
 
       private
@@ -50,6 +60,10 @@ module Lita
 
       def filter_match(filter, text)
         text.match(/#{filter}/i)
+      end
+
+      def cache_job_list(jobs)
+        self.class.jobs ||= jobs
       end
     end
 
