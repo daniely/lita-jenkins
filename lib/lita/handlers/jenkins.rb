@@ -9,6 +9,7 @@ module Lita
 
       def self.default_config(config)
         config.url = nil
+        self.jobs = {}
       end
 
       route /j(?:enkins)? list( (.+))?/i, :jenkins_list, command: true, help: {
