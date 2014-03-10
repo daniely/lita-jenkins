@@ -25,13 +25,17 @@ module Lita
           state         = color_to_state(job['color'])
           text_to_check = state + job_name
 
-          reply << "[#{i+1}] #{state} #{job_name}\n" if filter_match(filter, text_to_check)
+          reply << format_job(i, state, job_name) if filter_match(filter, text_to_check)
         end
 
         response.reply reply
       end
 
       private
+
+      def format_job(i, state, job_name)
+        "[#{i+1}] #{state} #{job_name}\n"
+      end
 
       def color_to_state(text)
         case text
