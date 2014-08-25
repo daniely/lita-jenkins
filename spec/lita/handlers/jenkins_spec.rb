@@ -25,6 +25,7 @@ describe Lita::Handlers::Jenkins, lita_handler: true do
 
     before do
       allow_any_instance_of(Faraday::Connection).to receive(:get).and_return(response)
+      allow_any_instance_of(Faraday::Connection).to receive(:post).and_return(response)
     end
 
     it 'lists all jenkins jobs' do
@@ -41,13 +42,31 @@ describe Lita::Handlers::Jenkins, lita_handler: true do
       expect(replies.last).to eq("[2] FAIL deploy\n[4] FAIL website\n")
     end
 
-    it 'caches job list' do
-      allow(response).to receive(:status).and_return(200)
+    it 'build job id' do
+      allow(response).to receive(:status).and_return(201)
       allow(response).to receive(:body).and_return(api_response)
-      jenkins = Lita::Handlers::Jenkins.new
-      expect(jenkins).to receive(:cache_job_list)
+      send_command('jenkins b 2')
+      expect(replies.last).to eq("(201) Build started for deploy /job/deploy")
+    end
 
-      send_command('jenkins list')
+    it 'build job bad id' do
+      allow(response).to receive(:status).and_return(201)
+      allow(response).to receive(:body).and_return(api_response)
+      send_command('jenkins b 99')
+      expect(replies.last).to eq("I couldn't find that job. Try `jenkins list` to get a list.")
+    end
+
+    it 'build job error 500 response' do
+      allow(response).to receive(:status).and_return(500)
+      allow(response).to receive(:body).and_return(api_response)
+      send_command('jenkins b 2')
+      expect(replies.last).to eq(api_response)
+    end
+
+    it 'build job error 500 response' do
+      Lita.config.handlers.jenkins.auth = "foo:bar"
+      return_value = Lita::Handlers::Jenkins.new.headers
+      expect(return_value.inspect).to eq("{\"Authorization\"=>\"Basic Zm9vOmJhcg==\"}")
     end
   end
 end
