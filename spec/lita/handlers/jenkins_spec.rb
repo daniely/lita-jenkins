@@ -1,8 +1,8 @@
 require "spec_helper"
 
 describe Lita::Handlers::Jenkins, lita_handler: true do
-  it { routes_command('jenkins list').to(:jenkins_list) }
-  it { routes_command('jenkins list filter').to(:jenkins_list) }
+  it { is_expected.to route_command('jenkins list').to(:jenkins_list) }
+  it { is_expected.to route_command('jenkins list filter').to(:jenkins_list) }
 
   describe '#jenkins list' do
     let(:response) { double("Faraday::Response") }
