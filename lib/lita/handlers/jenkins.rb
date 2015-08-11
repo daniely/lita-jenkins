@@ -1,6 +1,13 @@
 require 'json'
 require 'base64'
 
+# Determine if a given String is contains only a number.
+class String
+  def is_i?
+    /\A[-+]?\d+\z/ === self
+  end
+end
+
 module Lita
   module Handlers
     class Jenkins < Handler
@@ -17,12 +24,20 @@ module Lita
         'jenkins list <filter>' => 'lists Jenkins jobs'
       }
 
-      route /j(?:enkins)? b(?:uild)? (\d+)/i, :jenkins_build, command: true, help: {
-        'jenkins b(uild) <job_id>' => 'builds the job specified by job_id. List jobs to get ID.'
+      route /j(?:enkins)? b(?:uild)? (\w+)/i, :jenkins_build, command: true, help: {
+        'jenkins b(uild) <job_id or job_name>' => 'builds the job specified by ID or name. List jobs to get ID.'
       }
 
       def jenkins_build(response)
-        if job = jobs[response.matches.last.last.to_i - 1]
+        requested_job = response.matches.last.last
+
+        if requested_job.is_i?
+          inputjob = jobs[requested_job.to_i - 1]
+        else
+          inputjob = jobs.select { |j| j['name'] == requested_job }.last
+        end
+
+        if job = inputjob
           url    = Lita.config.handlers.jenkins.url
           path   = "#{url}/job/#{job['name']}/build"
 

@@ -49,10 +49,24 @@ describe Lita::Handlers::Jenkins, lita_handler: true do
       expect(replies.last).to eq("(201) Build started for deploy /job/deploy")
     end
 
+    it 'build job name' do
+      allow(response).to receive(:status).and_return(201)
+      allow(response).to receive(:body).and_return(api_response)
+      send_command('jenkins b deploy')
+      expect(replies.last).to eq("(201) Build started for deploy /job/deploy")
+    end
+
     it 'build job bad id' do
       allow(response).to receive(:status).and_return(201)
       allow(response).to receive(:body).and_return(api_response)
       send_command('jenkins b 99')
+      expect(replies.last).to eq("I couldn't find that job. Try `jenkins list` to get a list.")
+    end
+
+    it 'build job bad name' do
+      allow(response).to receive(:status).and_return(201)
+      allow(response).to receive(:body).and_return(api_response)
+      send_command('jenkins b sloppyjob')
       expect(replies.last).to eq("I couldn't find that job. Try `jenkins list` to get a list.")
     end
 
