@@ -36,12 +36,12 @@ module Lita
         requested_job = response.matches.last.last
 
         if requested_job.number?
-          inputjob = jobs[requested_job.to_i - 1]
+          job = jobs[requested_job.to_i - 1]
         else
-          inputjob = jobs.select { |j| j['name'] == requested_job }.last
+          job = jobs.select { |j| j['name'] == requested_job }.last
         end
 
-        if job = inputjob
+        if job
           url    = Lita.config.handlers.jenkins.url
           path   = "#{url}/job/#{job['name']}/build"
 
