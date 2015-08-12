@@ -3,7 +3,7 @@ require 'base64'
 
 # Determine if a given String is contains only a number.
 class String
-  def is_i?
+  def number?
     /\A[-+]?\d+\z/ === self
   end
 end
@@ -31,7 +31,7 @@ module Lita
       def jenkins_build(response)
         requested_job = response.matches.last.last
 
-        if requested_job.is_i?
+        if requested_job.number?
           inputjob = jobs[requested_job.to_i - 1]
         else
           inputjob = jobs.select { |j| j['name'] == requested_job }.last
