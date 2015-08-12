@@ -28,7 +28,7 @@ module Lita
         'jenkins list <filter>' => 'lists Jenkins jobs'
       }
 
-      route /j(?:enkins)? b(?:uild)? (\w+)/i, :jenkins_build, command: true, help: {
+      route /j(?:enkins)? b(?:uild)? ([\w\.\-_ ]+)/i, :jenkins_build, command: true, help: {
         'jenkins b(uild) <job_id or job_name>' => 'builds the job specified by ID or name. List jobs to get ID.'
       }
 
