@@ -1,16 +1,20 @@
 require 'json'
 require 'base64'
 
-# Determine if a given String is contains only a number.
-class String
-  def number?
-    /\A[-+]?\d+\z/ === self
+module StringRefinements
+  # Determine if a given String is contains only a number.
+  refine String do
+    def number?
+      /\A[-+]?\d+\z/ === self
+    end
   end
 end
 
 module Lita
   module Handlers
     class Jenkins < Handler
+      using StringRefinements
+
       class << self
         attr_accessor :jobs
       end
