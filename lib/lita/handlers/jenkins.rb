@@ -35,11 +35,11 @@ module Lita
       def jenkins_build(response)
         requested_job = response.matches.last.last
 
-        if requested_job.number?
-          job = jobs[requested_job.to_i - 1]
-        else
-          job = jobs.select { |j| j['name'] == requested_job }.last
-        end
+        job = if requested_job.number?
+                jobs[requested_job.to_i - 1]
+              else
+                jobs.select { |j| j['name'] == requested_job }.last
+              end
 
         if job
           url    = Lita.config.handlers.jenkins.url
