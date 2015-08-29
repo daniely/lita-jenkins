@@ -17,12 +17,14 @@ module Lita
 
       class << self
         attr_accessor :jobs
+
+        def jobs
+          @jobs ||= {}
+        end
       end
 
-      def self.default_config(config)
-        config.url = nil
-        self.jobs = {}
-      end
+      config :auth
+      config :url
 
       route /j(?:enkins)? list( (.+))?/i, :jenkins_list, command: true, help: {
         'jenkins list <filter>' => 'lists Jenkins jobs'
@@ -42,7 +44,7 @@ module Lita
               end
 
         if job
-          url    = Lita.config.handlers.jenkins.url
+          url    = config.url
           path   = "#{url}/job/#{job['name']}/build"
 
           http_resp = http.post(path) do |req|
@@ -76,7 +78,7 @@ module Lita
 
       def headers
         headers = {}
-        if auth = Lita.config.handlers.jenkins.auth
+        if auth = config.auth
           headers["Authorization"] = "Basic #{Base64.encode64(auth).chomp}"
         end
         headers
@@ -84,7 +86,7 @@ module Lita
 
       def jobs
         if self.class.jobs.empty?
-          path = "#{Lita.config.handlers.jenkins.url}/api/json"
+          path = "#{config.url}/api/json"
           api_response = http.get(path) do |req|
             req.headers = headers
           end
