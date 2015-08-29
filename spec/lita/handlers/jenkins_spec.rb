@@ -6,6 +6,7 @@ describe Lita::Handlers::Jenkins, lita_handler: true do
     it { is_expected.to route_command('jenkins list filter').to(:jenkins_list) }
     it { is_expected.to route_command('jenkins build 2').to(:jenkins_build) }
     it { is_expected.to route_command('jenkins build deploy').to(:jenkins_build) }
+    it { is_expected.to route_command('jenkins build deploy, PARAM=value').to(:jenkins_build) }
   end
 
   let(:response) { double("Faraday::Response") }
@@ -108,6 +109,24 @@ describe Lita::Handlers::Jenkins, lita_handler: true do
       allow(response).to receive(:body).and_return(api_response)
       send_command('jenkins b 2')
       expect(replies.last).to eq(api_response)
+    end
+
+    context 'paramterized builds' do
+      describe 'job with param' do
+        it 'builds job id' do
+          allow(response).to receive(:status).and_return(201)
+          allow(response).to receive(:body).and_return(api_response)
+          send_command('jenkins b 2, PARAM=value')
+          expect(replies.last).to eq("(201) Build started for deploy /job/deploy, Params: 'PARAM=value'")
+        end
+
+        it 'builds job name' do
+          allow(response).to receive(:status).and_return(201)
+          allow(response).to receive(:body).and_return(api_response)
+          send_command('jenkins b deploy, PARAM=value')
+          expect(replies.last).to eq("(201) Build started for deploy /job/deploy, Params: 'PARAM=value'")
+        end
+      end
     end
   end
 end

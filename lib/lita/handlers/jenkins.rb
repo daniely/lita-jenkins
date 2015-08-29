@@ -12,27 +12,37 @@ module Lita
         'jenkins list <filter>' => 'lists Jenkins jobs'
       }
 
-      route /j(?:enkins)? b(?:uild)? ([\w\.\-_ ]+)/i, :jenkins_build, command: true, help: {
+      route /j(?:enkins)? b(?:uild)? ([\w\.\-_ ]+)(, (.+))?/i, :jenkins_build, command: true, help: {
         'jenkins b(uild) <job_id or job_name>' => 'builds the job specified by ID or name. List jobs to get ID.'
       }
 
-      def jenkins_build(response)
-        job = find_job(response.matches.last.last)
+      def jenkins_build(response, empty_params = false)
+        job = find_job(response.matches.last.first)
+        input_params = response.matches.last.last
 
         unless job
           response.reply "I couldn't find that job. Try `jenkins list` to get a list."
           return
         end
 
+        # Either a Hash of params or True/False
+        params = input_params ? parse_params(input_params) : empty_params
+
         named_job_url = job_url(job['name'])
-        path = job_build_url(named_job_url)
+        path = job_build_url(named_job_url, params)
 
         http_resp = http.post(path) do |req|
           req.headers = headers
+          req.params  = params if params.is_a? Hash
         end
 
         if http_resp.status == 201
-          response.reply "(#{http_resp.status}) Build started for #{job['name']} #{named_job_url}"
+          reply_text = "(#{http_resp.status}) Build started for #{job['name']} #{named_job_url}"
+          reply_text << ", Params: '#{input_params}'" if input_params
+          response.reply reply_text
+        elsif http_resp.status == 400
+          log.debug 'Issuing rebuild with empty_params'
+          jenkins_build(response, true)
         else
           response.reply http_resp.body
         end
@@ -76,8 +86,12 @@ module Lita
         "#{config.url}/job/#{job_name}"
       end
 
-      def job_build_url(named_job_url)
-        "#{named_job_url}/build"
+      def job_build_url(named_job_url, params)
+        if params
+          "#{named_job_url}/buildWithParameters?#{params}"
+        else
+          "#{named_job_url}/build"
+        end
       end
 
       def find_job(requested_job)
@@ -106,6 +120,16 @@ module Lita
 
       def filter_match(filter, text)
         text.match(/#{filter}/i)
+      end
+
+      def parse_params(input_params)
+        {}.tap do |params|
+          input_params.split(',').each do |pair|
+            key, value = pair.split(/=/)
+            params[key.strip] = value.strip
+          end
+          log.debug "lita-jenkins#parse_params: #{params}"
+        end
       end
     end
 
