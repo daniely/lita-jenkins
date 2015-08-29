@@ -23,9 +23,8 @@ module Lita
         end
       end
 
-      def self.default_config(config)
-        config.url = nil
-      end
+      config :auth
+      config :url
 
       route /j(?:enkins)? list( (.+))?/i, :jenkins_list, command: true, help: {
         'jenkins list <filter>' => 'lists Jenkins jobs'
