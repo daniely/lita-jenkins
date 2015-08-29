@@ -17,11 +17,14 @@ module Lita
 
       class << self
         attr_accessor :jobs
+
+        def jobs
+          @jobs ||= {}
+        end
       end
 
       def self.default_config(config)
         config.url = nil
-        self.jobs = {}
       end
 
       route /j(?:enkins)? list( (.+))?/i, :jenkins_list, command: true, help: {
