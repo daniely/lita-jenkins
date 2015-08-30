@@ -97,9 +97,9 @@ describe Lita::Handlers::Jenkins, lita_handler: true do
       expect(replies.last).to eq(api_response)
     end
 
-    it 'build job error 500 response' do
-      Lita.config.handlers.jenkins.auth = "foo:bar"
-      return_value = Lita::Handlers::Jenkins.new.headers
+    it 'encodes auth headers correctly' do
+      registry.config.handlers.jenkins.auth = "foo:bar"
+      return_value = described_class.new(robot).headers
       expect(return_value.inspect).to eq("{\"Authorization\"=>\"Basic Zm9vOmJhcg==\"}")
     end
   end
