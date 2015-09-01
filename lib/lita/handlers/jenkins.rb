@@ -15,14 +15,6 @@ module Lita
     class Jenkins < Handler
       using StringRefinements
 
-      class << self
-        attr_accessor :jobs
-
-        def jobs
-          @jobs ||= {}
-        end
-      end
-
       config :auth
       config :url
 
@@ -85,14 +77,11 @@ module Lita
       end
 
       def jobs
-        if self.class.jobs.empty?
-          path = "#{config.url}/api/json"
-          api_response = http.get(path) do |req|
-            req.headers = headers
-          end
-          self.class.jobs = JSON.parse(api_response.body)["jobs"]
+        path = "#{config.url}/api/json"
+        api_response = http.get(path) do |req|
+          req.headers = headers
         end
-        self.class.jobs
+        JSON.parse(api_response.body)["jobs"]
       end
 
       private
