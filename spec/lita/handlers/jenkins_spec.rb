@@ -31,6 +31,19 @@ describe Lita::Handlers::Jenkins, lita_handler: true do
     allow_any_instance_of(Faraday::Connection).to receive(:post).and_return(response)
   end
 
+  describe '#headers' do
+    it 'returns empty auth headers correctly by default' do
+      return_value = described_class.new(robot).headers
+      expect(return_value.inspect).to eq("{}")
+    end
+
+    it 'encodes auth headers correctly' do
+      registry.config.handlers.jenkins.auth = "foo:bar"
+      return_value = described_class.new(robot).headers
+      expect(return_value.inspect).to eq("{\"Authorization\"=>\"Basic Zm9vOmJhcg==\"}")
+    end
+  end
+
   describe '#jenkins list' do
     it 'lists all jenkins jobs' do
       allow(response).to receive(:status).and_return(200)
@@ -95,12 +108,6 @@ describe Lita::Handlers::Jenkins, lita_handler: true do
       allow(response).to receive(:body).and_return(api_response)
       send_command('jenkins b 2')
       expect(replies.last).to eq(api_response)
-    end
-
-    it 'encodes auth headers correctly' do
-      registry.config.handlers.jenkins.auth = "foo:bar"
-      return_value = described_class.new(robot).headers
-      expect(return_value.inspect).to eq("{\"Authorization\"=>\"Basic Zm9vOmJhcg==\"}")
     end
   end
 end

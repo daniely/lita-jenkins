@@ -69,11 +69,9 @@ module Lita
       end
 
       def headers
-        headers = {}
-        if auth = config.auth
-          headers["Authorization"] = "Basic #{Base64.encode64(auth).chomp}"
+        {}.tap do |headers|
+          headers["Authorization"] = "Basic #{Base64.encode64(config.auth).chomp}" if config.auth
         end
-        headers
       end
 
       def jobs
