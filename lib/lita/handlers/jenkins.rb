@@ -75,8 +75,7 @@ module Lita
       end
 
       def jobs
-        path = "#{config.url}/api/json"
-        api_response = http.get(path) do |req|
+        api_response = http.get(api_url) do |req|
           req.headers = headers
         end
         JSON.parse(api_response.body)["jobs"]
@@ -84,8 +83,12 @@ module Lita
 
       private
 
+      def api_url
+        "#{config.url}/api/json"
+      end
+
       def format_job(i, state, job_name)
-        "[#{i+1}] #{state} #{job_name}\n"
+        "[#{i + 1}] #{state} #{job_name}\n"
       end
 
       def color_to_state(text)
