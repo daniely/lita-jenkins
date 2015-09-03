@@ -27,13 +27,7 @@ module Lita
       }
 
       def jenkins_build(response)
-        requested_job = response.matches.last.last
-
-        job = if requested_job.number?
-                jobs[requested_job.to_i - 1]
-              else
-                jobs.select { |j| j['name'] == requested_job }.last
-              end
+        job = find_job(response.matches.last.last)
 
         if job
           url    = config.url
@@ -85,6 +79,14 @@ module Lita
 
       def api_url
         "#{config.url}/api/json"
+      end
+
+      def find_job(requested_job)
+        if requested_job.number?
+          jobs[requested_job.to_i - 1]
+        else
+          jobs.select { |j| j['name'] == requested_job }.last
+        end
       end
 
       def format_job(i, state, job_name)
