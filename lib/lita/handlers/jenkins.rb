@@ -1,19 +1,9 @@
 require 'json'
 require 'base64'
 
-module StringRefinements
-  # Determine if a given String is contains only a number.
-  refine String do
-    def number?
-      /\A[-+]?\d+\z/ === self
-    end
-  end
-end
-
 module Lita
   module Handlers
     class Jenkins < Handler
-      using StringRefinements
 
       config :auth
       config :url
@@ -82,7 +72,8 @@ module Lita
       end
 
       def find_job(requested_job)
-        if requested_job.number?
+        # Determine if job is only a number.
+        if requested_job.match(/\A[-+]?\d+\z/)
           jobs[requested_job.to_i - 1]
         else
           jobs.select { |j| j['name'] == requested_job }.last
