@@ -19,21 +19,22 @@ module Lita
       def jenkins_build(response)
         job = find_job(response.matches.last.last)
 
-        if job
-          url    = config.url
-          path   = "#{url}/job/#{job['name']}/build"
-
-          http_resp = http.post(path) do |req|
-            req.headers = headers
-          end
-
-          if http_resp.status == 201
-            response.reply "(#{http_resp.status}) Build started for #{job['name']} #{url}/job/#{job['name']}"
-          else
-            response.reply http_resp.body
-          end
-        else
+        unless job
           response.reply "I couldn't find that job. Try `jenkins list` to get a list."
+          return
+        end
+
+        url  = config.url
+        path = "#{url}/job/#{job['name']}/build"
+
+        http_resp = http.post(path) do |req|
+          req.headers = headers
+        end
+
+        if http_resp.status == 201
+          response.reply "(#{http_resp.status}) Build started for #{job['name']} #{url}/job/#{job['name']}"
+        else
+          response.reply http_resp.body
         end
       end
 
