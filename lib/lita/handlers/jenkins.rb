@@ -24,15 +24,15 @@ module Lita
           return
         end
 
-        url  = config.url
-        path = "#{url}/job/#{job['name']}/build"
+        named_job_url = job_url(job['name'])
+        path = job_build_url(named_job_url)
 
         http_resp = http.post(path) do |req|
           req.headers = headers
         end
 
         if http_resp.status == 201
-          response.reply "(#{http_resp.status}) Build started for #{job['name']} #{url}/job/#{job['name']}"
+          response.reply "(#{http_resp.status}) Build started for #{job['name']} #{named_job_url}"
         else
           response.reply http_resp.body
         end
@@ -70,6 +70,14 @@ module Lita
 
       def api_url
         "#{config.url}/api/json"
+      end
+
+      def job_url(job_name)
+        "#{config.url}/job/#{job_name}"
+      end
+
+      def job_build_url(named_job_url)
+        "#{named_job_url}/build"
       end
 
       def find_job(requested_job)
