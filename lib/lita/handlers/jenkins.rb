@@ -7,6 +7,7 @@ module Lita
 
       config :auth
       config :url
+      config :http_options, required: false, type: Hash, default: {}
 
       route /j(?:enkins)? list( (.+))?/i, :jenkins_list, command: true, help: {
         'jenkins list <filter>' => 'lists Jenkins jobs'
@@ -31,7 +32,7 @@ module Lita
         named_job_url = job_url(job['name'])
         path = job_build_url(named_job_url, params)
 
-        http_resp = http.post(path) do |req|
+        http_resp = http(config.http_options).post(path) do |req|
           req.headers = headers
           req.params  = params if params.is_a? Hash
         end
@@ -70,7 +71,7 @@ module Lita
       end
 
       def jobs
-        api_response = http.get(api_url) do |req|
+        api_response = http(config.http_options).get(api_url) do |req|
           req.headers = headers
         end
         JSON.parse(api_response.body)["jobs"]
