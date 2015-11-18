@@ -45,6 +45,43 @@ describe Lita::Handlers::Jenkins, lita_handler: true do
     end
   end
 
+  describe '#http_options' do
+    it 'handles no options specified by default' do
+      http = described_class.new(robot).http
+      expect(http.options.empty?).to be true
+    end
+
+    it 'sets default http options on jobs request' do
+      handler = described_class.new(robot)
+      expect(handler).to receive(:http).with({}).and_call_original
+      allow(response).to receive(:body).and_return(api_response)
+      handler.jobs
+    end
+
+    it 'sets default http options for build' do
+      expect_any_instance_of(Lita::Handlers::Jenkins).to receive(:http).twice.with({}).and_call_original
+      allow(response).to receive(:body).and_return(api_response)
+      allow(response).to receive(:status).and_return(201)
+      send_command('jenkins b deploy')
+    end
+
+    it 'sets configured http options on jobs request' do
+      registry.config.handlers.jenkins.http_options = { url: 'http://test.com' }
+      handler = described_class.new(robot)
+      expect(handler).to receive(:http).with({ url: 'http://test.com' }).and_call_original
+      allow(response).to receive(:body).and_return(api_response)
+      handler.jobs
+    end
+
+    it 'sets configured http options for build' do
+      registry.config.handlers.jenkins.http_options = { url: 'http://test.com' }
+      expect_any_instance_of(Lita::Handlers::Jenkins).to receive(:http).twice.with({ url: 'http://test.com' }).and_call_original
+      allow(response).to receive(:body).and_return(api_response)
+      allow(response).to receive(:status).and_return(201)
+      send_command('jenkins b deploy')
+    end
+  end
+
   describe '#jenkins list' do
     it 'lists all jenkins jobs' do
       allow(response).to receive(:status).and_return(200)
