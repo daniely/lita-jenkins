@@ -40,12 +40,12 @@ module Lita
         if http_resp.status == 201
           reply_text = "(#{http_resp.status}) Build started for #{job['name']} #{named_job_url}"
           reply_text << ", Params: '#{input_params}'" if input_params
-          response.reply reply_text
+          response.reply reply_text.encode('UTF-8', 'binary', invalid: :replace, undef: :replace, replace: '')
         elsif http_resp.status == 400
           log.debug 'Issuing rebuild with empty_params'
           jenkins_build(response, true)
         else
-          response.reply http_resp.body
+          response.reply http_resp.body.encode('UTF-8', 'binary', invalid: :replace, undef: :replace, replace: '')
         end
       end
 
