@@ -66,7 +66,7 @@ module Lita
 
       def headers
         {}.tap do |headers|
-          headers["Authorization"] = "Basic #{Base64.encode64(config.auth).chomp}" if config.auth
+          headers["Authorization"] = "Basic #{Base64.strict_encode64(config.auth).chomp}" if config.auth
         end
       end
 

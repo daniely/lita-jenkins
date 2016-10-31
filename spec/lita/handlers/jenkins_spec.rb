@@ -43,6 +43,12 @@ describe Lita::Handlers::Jenkins, lita_handler: true do
       return_value = described_class.new(robot).headers
       expect(return_value.inspect).to eq("{\"Authorization\"=>\"Basic Zm9vOmJhcg==\"}")
     end
+
+    it 'encodes auth headers without line breaks' do
+      registry.config.handlers.jenkins.auth = "foo:thisisalongtokenthatmighthavelinebreakswithoutstrict"
+      return_value = described_class.new(robot).headers
+      expect(return_value.inspect).to eq("{\"Authorization\"=>\"Basic Zm9vOnRoaXNpc2Fsb25ndG9rZW50aGF0bWlnaHRoYXZlbGluZWJyZWFrc3dpdGhvdXRzdHJpY3Q=\"}")
+    end
   end
 
   describe '#http_options' do
