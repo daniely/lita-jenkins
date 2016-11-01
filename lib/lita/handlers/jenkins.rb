@@ -17,6 +17,10 @@ module Lita
         'jenkins b(uild) <job_id or job_name>' => 'builds the job specified by ID or name. List jobs to get ID.'
       }
 
+      route /j(?:enkins)? b(?:uild)? ([\w\.\-_ ]+)(, (.+))?/i, :jenkins_build, command: true, help: {
+        'jenkins b(uild) <job_id or job_name>, Param=value' => 'builds the job specified by ID or name. List jobs to get ID. With params'
+      }
+
       def jenkins_build(response, empty_params = false)
         job = find_job(response.matches.last.first)
         input_params = response.matches.last.last
