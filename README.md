@@ -1,6 +1,7 @@
 # lita-jenkins
 
-[![Build Status](https://travis-ci.org/daniely/lita-jenkins.png?branch=master)](https://travis-ci.org/daniely/lita-jenkins)
+[![Gem Version](https://badge.fury.io/rb/lita-jenkins.svg)](https://badge.fury.io/rb/lita-jenkins)
+[![Build Status](https://travis-ci.org/daniely/lita-jenkins.svg?branch=master)](https://travis-ci.org/daniely/lita-jenkins)
 
 Interact with your Jenkins CI server
 
