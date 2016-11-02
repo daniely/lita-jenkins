@@ -1,6 +1,6 @@
 Gem::Specification.new do |spec|
   spec.name          = "lita-jenkins"
-  spec.version       = "0.0.5"
+  spec.version       = "0.0.6"
   spec.authors       = ["Daniel Yoon", "Mike Fiedler"]
   spec.email         = ["daniel.kiros@gmail.com", "miketheman@gmail.com"]
   spec.description   = %q{Interact with Jenkins CI server.}
