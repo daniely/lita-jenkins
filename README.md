@@ -47,7 +47,6 @@ end
 [Lita]
 [3] FAIL build-all
 ```
-```
 
 ## License
 
