@@ -1,11 +1,11 @@
+*.gem
+*.rbc
 _yardoc
 .bundle
 .config
 .ruby-gemset
 .ruby-version
 .yardoc
-*.gem
-*.rbc
 coverage
 doc/
 Gemfile.lock
