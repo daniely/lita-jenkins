@@ -1,6 +1,9 @@
 # lita-jenkins
 
-[![Build Status](https://travis-ci.org/daniely/lita-jenkins.png?branch=master)](https://travis-ci.org/daniely/lita-jenkins)
+[![Gem Version](https://badge.fury.io/rb/lita-jenkins.svg)](https://badge.fury.io/rb/lita-jenkins)
+[![Build Status](https://travis-ci.org/daniely/lita-jenkins.svg?branch=master)](https://travis-ci.org/daniely/lita-jenkins)
+[![Code Climate](https://codeclimate.com/github/daniely/lita-jenkins/badges/gpa.svg)](https://codeclimate.com/github/daniely/lita-jenkins)
+[![license](https://img.shields.io/github/license/daniely/lita-jenkins.svg)]()
 
 Interact with your Jenkins CI server
 
@@ -43,7 +46,6 @@ end
  [You] Lita: jenkins list fail
 [Lita]
 [3] FAIL build-all
-```
 ```
 
 ## License

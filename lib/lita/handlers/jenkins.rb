@@ -14,7 +14,7 @@ module Lita
       }
 
       route /j(?:enkins)? b(?:uild)? ([\w\.\-_ ]+)(, (.+))?/i, :jenkins_build, command: true, help: {
-        'jenkins b(uild) <job_id or job_name>' => 'builds the job specified by ID or name. List jobs to get ID.'
+        'jenkins b(uild) <job_id or job_name>, param=value' => 'builds the job specified by ID or name. List jobs to get ID. If job has params add them with commas in between each.'
       }
 
       def jenkins_build(response, empty_params = false)
@@ -66,7 +66,7 @@ module Lita
 
       def headers
         {}.tap do |headers|
-          headers["Authorization"] = "Basic #{Base64.encode64(config.auth).chomp}" if config.auth
+          headers["Authorization"] = "Basic #{Base64.strict_encode64(config.auth).chomp}" if config.auth
         end
       end
 
