@@ -1,5 +1,4 @@
-require 'json'
-require 'base64'
+require 'jenkins_api_client'
 
 module Lita
   module Handlers
@@ -7,32 +6,62 @@ module Lita
 
       namespace "jenkins"
 
-      config :auth
-      config :url
-      config :http_options, required: false, type: Hash, default: {}
-      config :auth_mode
-      config :auth_domain
+      config :server, required: true
+      config :org_domain, required: true
 
-      route /j(?:enkins)? list( (.+))?/i, :jenkins_list, command: true, help: {
-        'jenkins list <filter>' => 'lists Jenkins jobs'
+      route /j(?:enkins)? a(?:uth)? (check|set|del)_token( (.+))?/i, :auth, command: true, help: {
+        'j(enkins) a(uth) {check|set|del}_token' => 'Check, set or delete your token for playing with Jenkins'
       }
 
-      route /j(?:enkins)? b(?:uild)? ([\w\.\-_ ]+)(, (.+))?/i, :jenkins_build, command: true, help: {
-        'jenkins b(uild) <job_id or job_name>, param=value' => 'builds the job specified by ID or name. List jobs to get ID. If job has params add them with commas in between each.'
+      route /j(?:enkins)? list( (.+))?/i, :list, command: true, help: {
+        'jenkins list' => 'Shows all accessable Jenkins jobs with last status'
       }
 
-      route /j(?:enkins)? a(?:uth)? (check|set|del)_token( (.+))?/i, :jenkins_auth, command: true, help: {
-        'jenkins auth {check|set|del}_token' => 'Check, set or delete your token for playing with Jenkins'
+      route /j(?:enkins)? show( (.+))?/i, :show, command: true, help: {
+        'jenkins show <job_name>' => 'Shows info for <job_name> job'
       }
 
-      def jenkins_auth(response)
+      route /j(?:enkins)? b(?:uild)? (\w+)( (.+))?/i, :build, command: true, help: {
+        'jenkins b(uild) <job_name> param:value,param2:value2' => 'Builds the job specified by name'
+      }
+
+      def build(response)
+        log.info response.matches
+        job_name   = response.matches.last.first
+        job_params = {}
+        opts       = { 'build_start_timeout': 30 }
+
+        unless response.matches.last.last.nil?
+          raw_params = response.matches.last.last
+
+          raw_params.split(',').each do |pair|
+            key, value = pair.split(':')
+            job_params[key] = value
+          end
+        end
+
+        client = make_client(response.user.mention_name)
+
+        if client
+          begin
+            client.job.build(job_name, job_params, opts)
+            last = client.job.get_builds(job_name).first
+            response.reply "Build started for #{job_name} - <#{last['url']}console>"
+          rescue
+            response.reply "Build failed, maybe job parametrized?"
+          end
+        else
+          "Troubles with request, maybe token is'not set? Try run 'lita jenkins auth check_token'"
+        end
+      end
+
+      def auth(response)
         username = response.user.mention_name
         mode     = response.matches.last.first
 
         reply = case mode
         when 'check'
           user_token = redis.get(username)
-
           if user_token.nil?
             'Token not found, you need set token via "lita jenkins auth set_token <token>" command'
           else
@@ -61,140 +90,51 @@ module Lita
         response.reply reply
       end
 
-      def jenkins_build(response, empty_params = false)
-        username     = response.user.mention_name
-        job          = find_job(response.matches.last.first, username)
-        input_params = response.matches.last.last
-
-        unless job
-          response.reply "I couldn't find that job. Try `jenkins list` to get a list."
-          return
-        end
-
-        # Either a Hash of params or True/False
-        params = input_params ? parse_params(input_params) : empty_params
-
-        named_job_url = job_url(job['name'])
-        path = job_build_url(named_job_url, params)
-
-        http_resp = http(config.http_options).post(path) do |req|
-          req.headers = headers(username)
-          req.params  = params if params.is_a? Hash
-        end
-
-        if http_resp.status == 201
-          reply_text = "(#{http_resp.status}) Build started for #{job['name']} #{named_job_url}"
-          reply_text << ", Params: '#{input_params}'" if input_params
-          response.reply reply_text.encode('UTF-8', 'binary', invalid: :replace, undef: :replace, replace: '')
-        elsif http_resp.status == 400
-          log.debug 'Issuing rebuild with empty_params'
-          jenkins_build(response, true)
-        else
-          response.reply http_resp.body.encode('UTF-8', 'binary', invalid: :replace, undef: :replace, replace: '')
-        end
-      end
-
-      def jenkins_list(response)
+      def show(response)
+        client = make_client(response.user.mention_name)
         filter = response.matches.first.last
-        username = response.user.mention_name
-        reply  = ''
 
-        jobs(username).each_with_index do |job, i|
-          job_name      = job['name']
-          state         = color_to_state(job['color'])
-          text_to_check = state + job_name
-
-          reply << format_job(i, state, job_name) if filter_match(filter, text_to_check)
-        end
-
-        response.reply reply
-      end
-
-      def headers(username)
-        {}.tap do |headers|
-          if config.auth_mode == 'split'
-            domain = config.auth_domain
-            if domain.nil?
-              log.error('No auth_domain set will use example.com')
-              domain = 'example.com'
-            end
-            if user_token = redis.get(username)
-              auth_pair = "#{username}@#{domain}:#{user_token}"
-              headers["Authorization"] = "Basic #{Base64.strict_encode64(auth_pair).chomp}"
-            else
-              headers["Authorization"] = nil
-              log.error('No token for user')
-            end
-          else
-            if config.auth
-              headers["Authorization"] = "Basic #{Base64.strict_encode64(config.auth).chomp}"
-            else
-              log.error('No auth set in config')
-            end
-          end
+        if client
+          job = client.job.list_details(filter)
+          response.reply "General: <#{job['url']}|#{job['name']}> - #{job['color']}
+Desc: #{job['description']}
+Health: #{job['healthReport'][0]['score']} - #{job['healthReport'][0]['description']}
+Last build: <#{job['lastBuild']['url']}>"
+        else
+          response.reply "Troubles with request, maybe token is'not set? Try run 'lita jenkins auth check_token'"
         end
       end
 
-      def jobs(username)
-          api_response = http(config.http_options).get(api_url) do |req|
-            req.headers = headers(username)
+      def list(response)
+        client = make_client(response.user.mention_name)
+        if client
+          answer = ''
+          jobs = client.job.list_all_with_details
+          jobs.each_with_index do |job, n|
+            answer << "#{n + 1}. <#{job['url']}|#{job['name']}> - #{job['color']}\n"
           end
-        JSON.parse(api_response.body)["jobs"]
+          response.reply answer
+        else
+          response.reply "Troubles with request, maybe token is'not set? Try run 'lita jenkins auth check_token'"
+        end
       end
 
       private
 
-      def api_url
-        "#{config.url}/api/json"
-      end
+      def make_client(username)
+        user_token = redis.get(username)
 
-      def job_url(job_name)
-        "#{config.url}/job/#{job_name}"
-      end
-
-      def job_build_url(named_job_url, params)
-        if params
-          "#{named_job_url}/buildWithParameters?#{params}"
+        if user_token.nil?
+          false
         else
-          "#{named_job_url}/build"
-        end
-      end
-
-      def find_job(requested_job, username)
-        # Determine if job is only a number.
-        if requested_job.match(/\A[-+]?\d+\z/)
-          jobs[requested_job.to_i - 1]
-        else
-          jobs(username).select { |j| j['name'] == requested_job }.last
-        end
-      end
-
-      def format_job(i, state, job_name)
-        "[#{i + 1}] #{state} #{job_name}\n"
-      end
-
-      def color_to_state(text)
-        case text
-        when /disabled/
-          'OFF'
-        when /red/
-          'FAIL'
-        else
-          'SUCC'
-        end
-      end
-
-      def filter_match(filter, text)
-        text.match(/#{filter}/i)
-      end
-
-      def parse_params(input_params)
-        {}.tap do |params|
-          input_params.split(',').each do |pair|
-            key, value = pair.split(/=/)
-            params[key.strip] = value.strip
-          end
-          log.debug "lita-jenkins#parse_params: #{params}"
+          log.info "#{username} | #{config.org_domain} | #{user_token} | #{config.server}"
+          JenkinsApi::Client.new(
+            server_ip: config.server,
+            server_port: '443',
+            username: "#{username}@#{config.org_domain}",
+            password: user_token,
+            ssl: true
+          )
         end
       end
     end
