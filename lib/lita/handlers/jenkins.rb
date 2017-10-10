@@ -5,9 +5,13 @@ module Lita
   module Handlers
     class Jenkins < Handler
 
+      namespace "jenkins"
+
       config :auth
       config :url
       config :http_options, required: false, type: Hash, default: {}
+      config :auth_mode
+      config :auth_domain
 
       route /j(?:enkins)? list( (.+))?/i, :jenkins_list, command: true, help: {
         'jenkins list <filter>' => 'lists Jenkins jobs'
@@ -17,8 +21,49 @@ module Lita
         'jenkins b(uild) <job_id or job_name>, param=value' => 'builds the job specified by ID or name. List jobs to get ID. If job has params add them with commas in between each.'
       }
 
+      route /j(?:enkins)? a(?:uth)? (check|set|del)_token( (.+))?/i, :jenkins_auth, command: true, help: {
+        'jenkins auth {check|set|del}_token' => 'Check, set or delete your token for playing with Jenkins'
+      }
+
+      def jenkins_auth(response)
+        username = response.user.mention_name
+        mode     = response.matches.last.first
+
+        reply = case mode
+        when 'check'
+          user_token = redis.get(username)
+
+          if user_token.nil?
+            'Token not found, you need set token via "lita jenkins auth set_token <token>" command'
+          else
+            'Token already set, you can play with Jenkins'
+          end
+        when 'set'
+          user_token = response.matches.last.last.strip
+
+          if redis.set(username, user_token)
+            'Token saved, enjoy!'
+          else
+            'We have some troubles, try later'
+          end
+        when 'del'
+          user_token = redis.get(username)
+
+          if redis.del(username)
+            'Token deleted, so far so good'
+          else
+            'We have some troubles, try later'
+          end
+        else
+          'Wrong command for "jenkins auth"'
+        end
+
+        response.reply reply
+      end
+
       def jenkins_build(response, empty_params = false)
-        job = find_job(response.matches.last.first)
+        username     = response.user.mention_name
+        job          = find_job(response.matches.last.first, username)
         input_params = response.matches.last.last
 
         unless job
@@ -33,7 +78,7 @@ module Lita
         path = job_build_url(named_job_url, params)
 
         http_resp = http(config.http_options).post(path) do |req|
-          req.headers = headers
+          req.headers = headers(username)
           req.params  = params if params.is_a? Hash
         end
 
@@ -51,9 +96,10 @@ module Lita
 
       def jenkins_list(response)
         filter = response.matches.first.last
+        username = response.user.mention_name
         reply  = ''
 
-        jobs.each_with_index do |job, i|
+        jobs(username).each_with_index do |job, i|
           job_name      = job['name']
           state         = color_to_state(job['color'])
           text_to_check = state + job_name
@@ -64,16 +110,35 @@ module Lita
         response.reply reply
       end
 
-      def headers
+      def headers(username)
         {}.tap do |headers|
-          headers["Authorization"] = "Basic #{Base64.strict_encode64(config.auth).chomp}" if config.auth
+          if config.auth_mode == 'split'
+            domain = config.auth_domain
+            if domain.nil?
+              log.error('No auth_domain set will use example.com')
+              domain = 'example.com'
+            end
+            if user_token = redis.get(username)
+              auth_pair = "#{username}@#{domain}:#{user_token}"
+              headers["Authorization"] = "Basic #{Base64.strict_encode64(auth_pair).chomp}"
+            else
+              headers["Authorization"] = nil
+              log.error('No token for user')
+            end
+          else
+            if config.auth
+              headers["Authorization"] = "Basic #{Base64.strict_encode64(config.auth).chomp}"
+            else
+              log.error('No auth set in config')
+            end
+          end
         end
       end
 
-      def jobs
-        api_response = http(config.http_options).get(api_url) do |req|
-          req.headers = headers
-        end
+      def jobs(username)
+          api_response = http(config.http_options).get(api_url) do |req|
+            req.headers = headers(username)
+          end
         JSON.parse(api_response.body)["jobs"]
       end
 
@@ -95,12 +160,12 @@ module Lita
         end
       end
 
-      def find_job(requested_job)
+      def find_job(requested_job, username)
         # Determine if job is only a number.
         if requested_job.match(/\A[-+]?\d+\z/)
           jobs[requested_job.to_i - 1]
         else
-          jobs.select { |j| j['name'] == requested_job }.last
+          jobs(username).select { |j| j['name'] == requested_job }.last
         end
       end
 
@@ -111,7 +176,7 @@ module Lita
       def color_to_state(text)
         case text
         when /disabled/
-          'DISA'
+          'OFF'
         when /red/
           'FAIL'
         else
