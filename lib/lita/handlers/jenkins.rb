@@ -26,7 +26,6 @@ module Lita
       }
 
       def build(response)
-        log.info response.matches
         job_name   = response.matches.last.first
         job_params = {}
         opts       = { 'build_start_timeout': 30 }
@@ -127,7 +126,6 @@ Last build: <#{job['lastBuild']['url']}>"
         if user_token.nil?
           false
         else
-          log.info "#{username} | #{config.org_domain} | #{user_token} | #{config.server}"
           JenkinsApi::Client.new(
             server_ip: config.server,
             server_port: '443',
