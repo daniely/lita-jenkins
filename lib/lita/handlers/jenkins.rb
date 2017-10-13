@@ -1,4 +1,5 @@
 require 'jenkins_api_client'
+require 'json'
 
 module Lita
   module Handlers
@@ -21,9 +22,59 @@ module Lita
         'jenkins show <job_name>' => 'Shows info for <job_name> job'
       }
 
-      route /j(?:enkins)? b(?:uild)? (\w+)( (.+))?/i, :build, command: true, help: {
+      route /j(?:enkins)? b(?:uild)? ([\w\-]+)( (.+))?/i, :build, command: true, help: {
         'jenkins b(uild) <job_name> param:value,param2:value2' => 'Builds the job specified by name'
       }
+
+      route /j(?:enkins)?(\W+)?d(?:eploy)?(\W+)?([\w\-]+)(\W+)?([\w\-]+)?(\W+)?to(\W+)?([\w\-]+)/i, :deploy, command: true, help: {
+        'jenkins d(eploy) <project> <branch> to <stage>' => 'Start dynamic deploy with params. Не выбранный бренч, зальет версию продакшна.'
+      }
+
+      def deploy(response)
+        params     = response.matches.last.reject(&:blank?) #["avia", "OTT-123", "sandbox-15"]
+        project    = params[0]
+        branch     = ''
+        stage      = ''
+        job_name   = 'dynamic_deploy'
+        job_params = {}
+        opts       = { 'build_start_timeout': 30 }
+
+
+        if params.size == 3
+          branch = params[1]
+          stage  = params[2]
+        elsif params.size == 2
+          stage  = params[1]
+        else
+          response.reply 'Something wrong with params :fire:'
+          return
+        end
+
+        job_params['DEPLOY'] = {
+          "CHECKMASTER" => true,
+          "PROJECTS" => {
+            project.upcase => {
+              "ENABLE" => true,
+              "BRANCH" => branch
+            }
+          },
+          "STAGE" => stage
+        }
+
+        client = make_client(response.user.mention_name)
+
+        if client
+          begin
+            client.job.build(job_name, job_params, opts)
+            last = client.job.get_builds(job_name).first
+            response.reply "Deploy started :rocket: for #{project} - <#{last['url']}console>"
+          rescue
+            response.reply "Deploy failed, check params :shia:"
+          end
+        else
+          "Troubles with request, maybe token is'not set? Try run 'lita jenkins auth check_token'"
+        end
+      end
 
       def build(response)
         job_name   = response.matches.last.first
@@ -110,7 +161,8 @@ Last build: <#{job['lastBuild']['url']}>"
           answer = ''
           jobs = client.job.list_all_with_details
           jobs.each_with_index do |job, n|
-            answer << "#{n + 1}. <#{job['url']}|#{job['name']}> - #{job['color']}\n"
+            slackmoji = color_to_slackmoji(job['color'])
+            answer << "#{n + 1}. <#{job['url']}|#{job['name']}> - #{job['color']} #{slackmoji}\n"
           end
           response.reply answer
         else
@@ -131,8 +183,26 @@ Last build: <#{job['lastBuild']['url']}>"
             server_port: '443',
             username: "#{username}@#{config.org_domain}",
             password: user_token,
-            ssl: true
+            ssl: true,
+            log_level: 0
           )
+        end
+      end
+
+      def color_to_slackmoji(color)
+        case color
+        when 'notbuilt'
+          ':new:'
+        when 'blue'
+          ':woohoo:'
+        when 'disabled'
+          ':no_bicycles:'
+        when 'red'
+          ':wide_eye_pepe:'
+        when 'yellow'
+          ':pikachu:'
+        when 'aborted'
+          ':ultrarage:'
         end
       end
     end
