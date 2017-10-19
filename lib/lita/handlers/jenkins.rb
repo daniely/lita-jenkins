@@ -1,5 +1,7 @@
 require 'jenkins_api_client'
 require 'json'
+require 'http'
+require 'awesome_print'
 
 module Lita
   module Handlers
@@ -66,10 +68,34 @@ module Lita
         if client
           begin
             client.job.build(job_name, job_params, opts)
+            # username = response.user.mention_name
+            # user_full = "#{username}@#{config.org_domain}"
+            # token    = redis.get(username)
+            # auth     = "#{username}@#{config.org_domain}:#{token}"
+            # reply_text = ''
+
+            # path = "https://#{config.server}/job/dynamic_deploy/buildWithParameters?DEPLOY=#{job_params.to_json}"
+
+            # http_resp = HTTP.basic_auth(user: user_full, pass: token).post(path, json: job_params)
+
+            # if http_resp.code == 201
+            #   last       = client.job.get_builds(job_name).first
+            #   reply_text = "Deploy started :rocket: for #{project} - <#{last['url']}console>"
+
+            #   response.reply reply_text
+            # elsif http_resp.code == 400
+            #   reply_text = "Jenkins is busy, please try later"
+            # else
+            #   log.info http_resp.code
+            #   ap http_resp
+            #   reply_text = 'error'
+            # end
+
             last = client.job.get_builds(job_name).first
             response.reply "Deploy started :rocket: for #{project} - <#{last['url']}console>"
-          rescue
-            response.reply "Deploy failed, check params :shia:"
+            # response.reply reply_text
+          rescue Exception => e
+            response.reply "Deploy failed, check params :shia: #{e}"
           end
         else
           "Troubles with request, maybe token is'not set? Try run 'lita jenkins auth check_token'"
