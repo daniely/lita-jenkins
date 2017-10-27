@@ -1,7 +1,7 @@
 require 'jenkins_api_client'
 require 'json'
 require 'http'
-require 'awesome_print'
+require 'uri'
 
 module Lita
   module Handlers
@@ -52,53 +52,59 @@ module Lita
           return
         end
 
-        job_params['DEPLOY'] = {
-          "CHECKMASTER" => true,
-          "PROJECTS" => {
+        job_params = {
+          'STAGE' => stage,
+          'CHECKMASTER' => false,
+          'PROJECTS' => {
             project.upcase => {
-              "ENABLE" => true,
-              "BRANCH" => branch
+              'ENABLE' => true,
+              'BRANCH' => branch
             }
-          },
-          "STAGE" => stage
+          }
         }
 
         client = make_client(response.user.mention_name)
 
         if client
           begin
-            client.job.build(job_name, job_params, opts)
-            # username = response.user.mention_name
-            # user_full = "#{username}@#{config.org_domain}"
-            # token    = redis.get(username)
-            # auth     = "#{username}@#{config.org_domain}:#{token}"
-            # reply_text = ''
 
-            # path = "https://#{config.server}/job/dynamic_deploy/buildWithParameters?DEPLOY=#{job_params.to_json}"
+            username = response.user.mention_name
+            user_full = "#{username}@#{config.org_domain}"
+            token    = redis.get(username)
+            reply_text = ''
 
-            # http_resp = HTTP.basic_auth(user: user_full, pass: token).post(path, json: job_params)
+            path = "https://#{config.server}/job/dynamic_deploy/build"
+            data = {
+              'json' => {
+                'parameter' => [
+                  {
+                    'name' => 'DEPLOY',
+                    'value' => job_params.to_json
+                  }
+                ]
+              }
+            }
+            encoded = URI.encode_www_form(data)
 
-            # if http_resp.code == 201
-            #   last       = client.job.get_builds(job_name).first
-            #   reply_text = "Deploy started :rocket: for #{project} - <#{last['url']}console>"
+            http_resp = HTTP.basic_auth(user: user_full, pass: token)
+                            .headers(accept: 'application/json')
+                            .headers('Content-Type' => 'application/x-www-form-urlencoded')
+                            .post(path, body: URI.encode_www_form(data))
 
-            #   response.reply reply_text
-            # elsif http_resp.code == 400
-            #   reply_text = "Jenkins is busy, please try later"
-            # else
-            #   log.info http_resp.code
-            #   ap http_resp
-            #   reply_text = 'error'
-            # end
+            if http_resp.code == 201
+              last       = client.job.get_builds(job_name).first
+              reply_text = "Deploy started :rocket: for #{project} - <#{last['url']}console>"
+            else
+              log.info http_resp.inspect
+              reply_text = 'Error'
+            end
 
-            last = client.job.get_builds(job_name).first
-            response.reply "Deploy started :rocket: for #{project} - <#{last['url']}console>"
-            # response.reply reply_text
+            response.reply reply_text
           rescue Exception => e
             response.reply "Deploy failed, check params :shia: #{e}"
           end
         else
-          "Troubles with request, maybe token is'not set? Try run 'lita jenkins auth check_token'"
+          response.reply "Troubles with request, maybe token is'not set? Try run 'lita jenkins auth check_token'"
         end
       end
 
@@ -209,8 +215,7 @@ Last build: <#{job['lastBuild']['url']}>"
             server_port: '443',
             username: "#{username}@#{config.org_domain}",
             password: user_token,
-            ssl: true,
-            log_level: 0
+            ssl: true
           )
         end
       end
