@@ -1,6 +1,6 @@
 Gem::Specification.new do |spec|
   spec.name          = "lita-jenkins"
-  spec.version       = "0.0.6"
+  spec.version       = "0.1.0"
   spec.authors       = ["Daniel Yoon", "Mike Fiedler"]
   spec.email         = ["daniel.kiros@gmail.com", "miketheman@gmail.com"]
   spec.description   = %q{Interact with Jenkins CI server.}
@@ -19,7 +19,6 @@ Gem::Specification.new do |spec|
   spec.add_runtime_dependency "lita", ">= 3.0"
   spec.add_runtime_dependency "jenkins_api_client"
   spec.add_runtime_dependency "http"
-  spec.add_runtime_dependency "awesome_print"
 
   spec.add_development_dependency "bundler", "~> 1.3"
   spec.add_development_dependency "rake"
