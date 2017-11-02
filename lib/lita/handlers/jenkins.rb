@@ -28,7 +28,7 @@ module Lita
         'jenkins b(uild) <job_name> param:value,param2:value2' => 'Builds the job specified by name'
       }
 
-      route /j(?:enkins)?(\W+)?d(?:eploy)?(\W+)?([\w\-]+)(\W+)?([\w\-]+)?(\W+)?to(\W+)?([\w\-]+)/i, :deploy, command: true, help: {
+      route /j(?:enkins)?(\W+)?d(?:eploy)?(\W+)?([\w\-]+)(\W+)?([\w\-\,]+)?(\W+)?to(\W+)?([\w\-]+)/i, :deploy, command: true, help: {
         'jenkins d(eploy) <branch> <project1,project2> to <stage>' => 'Start dynamic deploy with params. Не выбранный бренч, зальет версию продакшна.'
       }
 
