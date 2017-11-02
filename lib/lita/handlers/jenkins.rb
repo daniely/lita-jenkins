@@ -55,13 +55,17 @@ module Lita
         job_params = {
           'STAGE' => stage,
           'CHECKMASTER' => false,
-          'PROJECTS' => {
-            project.upcase => {
+          'PROJECTS' => {}
+        }
+
+        project.split(',').each do |proj|
+          job_params['PROJECTS'] << {
+            proj.upcase => {
               'ENABLE' => true,
               'BRANCH' => branch
             }
           }
-        }
+        end
 
         client = make_client(response.user.mention_name)
 
