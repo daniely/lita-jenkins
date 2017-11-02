@@ -29,12 +29,12 @@ module Lita
       }
 
       route /j(?:enkins)?(\W+)?d(?:eploy)?(\W+)?([\w\-]+)(\W+)?([\w\-]+)?(\W+)?to(\W+)?([\w\-]+)/i, :deploy, command: true, help: {
-        'jenkins d(eploy) <project> <branch> to <stage>' => 'Start dynamic deploy with params. Не выбранный бренч, зальет версию продакшна.'
+        'jenkins d(eploy) <branch> <project1,project2> to <stage>' => 'Start dynamic deploy with params. Не выбранный бренч, зальет версию продакшна.'
       }
 
       def deploy(response)
-        params     = response.matches.last.reject(&:blank?) #["avia", "OTT-123", "sandbox-15"]
-        project    = params[0]
+        params     = response.matches.last.reject(&:blank?) #["OTT-123", "avia", "sandbox-15"]
+        project    = params[1]
         branch     = ''
         stage      = ''
         job_name   = 'dynamic_deploy'
@@ -43,7 +43,7 @@ module Lita
 
 
         if params.size == 3
-          branch = params[1]
+          branch = params[0]
           stage  = params[2]
         elsif params.size == 2
           stage  = params[1]
