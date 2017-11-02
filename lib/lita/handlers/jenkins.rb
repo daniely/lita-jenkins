@@ -59,11 +59,9 @@ module Lita
         }
 
         project.split(',').each do |proj|
-          job_params['PROJECTS'] << {
-            proj.upcase => {
-              'ENABLE' => true,
-              'BRANCH' => branch
-            }
+          job_params['PROJECTS'][proj.upcase] = {
+            'ENABLE' => true,
+            'BRANCH' => branch
           }
         end
 
