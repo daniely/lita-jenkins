@@ -40,6 +40,7 @@ module Lita
         job_name   = 'dynamic_deploy'
         job_params = {}
         opts       = { 'build_start_timeout': 30 }
+        username   = response.user.mention_name
 
 
         if params.size == 3
@@ -65,12 +66,11 @@ module Lita
           }
         end
 
-        client = make_client(response.user.mention_name)
+        client = make_client(username)
 
         if client
           begin
 
-            username = response.user.mention_name
             user_full = "#{username}@#{config.org_domain}"
             token    = redis.get(username)
             reply_text = ''
@@ -96,9 +96,11 @@ module Lita
             if http_resp.code == 201
               last       = client.job.get_builds(job_name).first
               reply_text = "Deploy started :rocket: for #{project} - <#{last['url']}console>"
+            elsif http_resp.code == 401
+              reply_text = ':no_mobile_phones: Unauthorized, check token or mention name'
             else
               log.info http_resp.inspect
-              reply_text = 'Error'
+              reply_text = 'Unknown error'
             end
 
             response.reply reply_text
@@ -207,6 +209,7 @@ Last build: <#{job['lastBuild']['url']}>"
       private
 
       def make_client(username)
+        log.info "Trying user - #{username}"
         user_token = redis.get(username)
 
         if user_token.nil?
