@@ -72,7 +72,7 @@ module Lita
           begin
 
             user_full = "#{username}@#{config.org_domain}"
-            token    = redis.get(username)
+            token    = redis.get("#{username}:token")
             reply_text = ''
 
             path = "https://#{config.server}/job/dynamic_deploy/build"
@@ -147,7 +147,7 @@ module Lita
 
         reply = case mode
         when 'check'
-          user_token = redis.get(username)
+          user_token = redis.get("#{username}:token")
           if user_token.nil?
             'Token not found, you need set token via "lita jenkins auth set_token <token>" command'
           else
@@ -156,13 +156,13 @@ module Lita
         when 'set'
           user_token = response.matches.last.last.strip
 
-          if redis.set(username, user_token)
+          if redis.set("#{username}:token", user_token)
             'Token saved, enjoy!'
           else
             'We have some troubles, try later'
           end
         when 'del'
-          user_token = redis.get(username)
+          user_token = redis.get("#{username}:token")
 
           if redis.del(username)
             'Token deleted, so far so good'
@@ -210,7 +210,7 @@ Last build: <#{job['lastBuild']['url']}>"
 
       def make_client(username)
         log.info "Trying user - #{username}"
-        user_token = redis.get(username)
+        user_token = redis.get("#{username}:token")
 
         if user_token.nil?
           false
