@@ -7,13 +7,18 @@ module Lita
   module Handlers
     class Jenkins < Handler
 
-      namespace "jenkins"
+      namespace 'jenkins'
 
       config :server, required: true
       config :org_domain, required: true
+      config :notify_user, required: true
 
       route /j(?:enkins)? a(?:uth)? (check|set|del)_token( (.+))?/i, :auth, command: true, help: {
         'j(enkins) a(uth) {check|set|del}_token' => 'Check, set or delete your token for playing with Jenkins'
+      }
+
+      route /j(?:enkins)?(\W+)?n(?:otify)?(\W+)?(\w+)?$?/i, :set_notify_mode, command: true, help: {
+        'j(enkins) n(notify) {true|false}' => 'Set notify mode for build status: false - no notify (default), true - notify to direct messages'
       }
 
       route /j(?:enkins)? list( (.+))?/i, :list, command: true, help: {
@@ -31,6 +36,89 @@ module Lita
       route /j(?:enkins)?(\W+)?d(?:eploy)?(\W+)?([\w\-\.]+)(\W+)?([\w\-\,]+)?(\W+)?to(\W+)?([\w\-]+)/i, :deploy, command: true, help: {
         'jenkins d(eploy) <branch> <project1,project2> to <stage>' => 'Start dynamic deploy with params. Не выбранный бренч, зальет версию продакшна.'
       }
+
+      on :loaded, :loop
+
+      def loop(response)
+        every(10) do |timer|
+          begin
+            hash = JSON.parse(redis.get('notify'))
+          rescue Exception => e
+            redis.set('notify', {}.to_json)
+            hash = JSON.parse(redis.get('notify'))
+          end
+          client = make_client(config.notify_user)
+
+          def process_job(hash, job_name, last_build, client)
+            # if hash[jjob['name']] && hash[jjob['name']] < client.job.get_builds(jjob['name']).first['number']
+            hash[job_name] += 1
+            # puts "/job/#{job_name}/#{hash[job_name]}/api/json"
+            build = client.api_get_request("/job/#{job_name}/#{hash[job_name]}/api/json")
+            cause = build['actions'].select { |e| e['_class'] == 'hudson.model.CauseAction' }
+            user_cause = cause.first['causes'].select { |e| e['_class'] == 'hudson.model.Cause$UserIdCause' }.first
+            return if build['building']
+            unless user_cause.nil?
+              user         = user_cause['userId'].split('@').first
+              runned       = build['displayName']
+              build_number = hash[job_name]
+              started      = build['timestamp']
+              duration     = build['duration']
+              result       = build['result']
+              url          = build['url']
+
+              unless notify_mode = redis.get("#{user}:notify")
+                redis.set("#{user}:notify", 'false')
+                notify_mode = 'false'
+              end
+
+              if notify_mode == 'true'
+                if result == 'SUCCESS'
+                  color = 'good'
+                elsif result == 'FAILURE'
+                  color = 'danger'
+                else
+                  color = 'warning'
+                end
+
+                started    = started.to_i / 1000
+                duration   = duration.to_i / 1000
+                time       = Time.at(started).strftime("%d-%m-%Y %H:%M:%S")
+                text       = "Result for #{job_name} #{build_number} started on #{time} for #{runned} is #{result}\nDuration: #{duration} sec"
+                attachment = Lita::Adapters::Slack::Attachment.new(
+                  text, {
+                    title: 'Build status',
+                    title_link: url,
+                    text: text,
+                    color: color
+                  }
+                )
+                lita_user = Lita::User.find_by_mention_name(user)
+                # target    = Source.new(user: lita_user)
+                robot.chat_service.send_attachment(lita_user, attachment)
+                # robot.send_message(target, text)
+              end
+              # puts "#{user} #{job_name} #{runned} #{build_number} #{started} #{duration} #{result} #{url}"
+            end
+            redis.set('notify', hash.to_json)
+            process_job(hash, job_name, last_build, client) if hash[job_name] < last_build
+          end
+
+          client.job.list_all_with_details.each do |jjob|
+            unless jjob['color'] == 'disabled' || jjob['color'] == 'notbuilt'
+              last_build = client.job.get_builds(jjob['name']).first['number']
+
+              if hash[jjob['name']]
+                if hash[jjob['name']] < last_build
+                  process_job(hash, jjob['name'], last_build, client)
+                end
+              else
+                hash[jjob['name']] = last_build
+                redis.set('notify', hash.to_json)
+              end
+            end
+          end
+        end
+      end
 
       def deploy(response)
         params     = response.matches.last.reject(&:blank?) #["OTT-123", "avia", "sandbox-15"]
@@ -157,6 +245,9 @@ module Lita
           user_token = response.matches.last.last.strip
 
           if redis.set("#{username}:token", user_token)
+            unless redis.get("#{username}:notify")
+              redis.set("#{username}:notify", 'false')
+            end
             'Token saved, enjoy!'
           else
             'We have some troubles, try later'
@@ -174,6 +265,22 @@ module Lita
         end
 
         response.reply reply
+      end
+
+      def set_notify_mode(response)
+        username = response.user.mention_name
+        mode     = response.matches.last.reject(&:blank?).first
+
+        if mode.nil?
+          current_mode = redis.get("#{username}:notify")
+          response.reply "Current notify mode is `#{current_mode}`"
+        # elsif ['none', 'direct', 'channel', 'smart'].include?(mode)
+        elsif ['true', 'false'].include?(mode)
+          redis.set("#{username}:notify", mode)
+          response.reply ":yay: Notify mode `#{mode}` saved"
+        else
+          response.reply ":wat: Unknown notify mode `#{mode}`"
+        end
       end
 
       def show(response)
@@ -220,7 +327,8 @@ Last build: <#{job['lastBuild']['url']}>"
             server_port: '443',
             username: "#{username}@#{config.org_domain}",
             password: user_token,
-            ssl: true
+            ssl: true,
+            log_level: 3
           )
         end
       end
