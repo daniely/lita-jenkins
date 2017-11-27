@@ -42,59 +42,83 @@ module Lita
       def loop(response)
         every(10) do |timer|
           begin
+            puts 'begin hash'
             hash = JSON.parse(redis.get('notify'))
           rescue Exception => e
+            puts 'rescue hash'
             redis.set('notify', {}.to_json)
             hash = JSON.parse(redis.get('notify'))
           end
+          puts 'client'
           client = make_client(config.notify_user)
 
           def process_job(hash, job_name, last_build, client)
+            puts 'inside process_job'
             # if hash[jjob['name']] && hash[jjob['name']] < client.job.get_builds(jjob['name']).first['number']
             hash[job_name] += 1
             puts "/job/#{job_name}/#{hash[job_name]}/api/json"
             begin
+              puts 'inside begin build'
               build = client.api_get_request("/job/#{job_name}/#{hash[job_name]}/api/json")
             rescue JenkinsApi::Exceptions::NotFound => e
+              puts 'resuce begin build resdis set'
               redis.set('notify', hash.to_json)
+              puts 'again run process_job'
               process_job(hash, job_name, last_build, client) if hash[job_name] < last_build
             end
-            puts build.inspect
+            puts 'cause'
             cause = build['actions'].select { |e| e['_class'] == 'hudson.model.CauseAction' }
-            puts 'after case'
+            puts 'user_cause'
             user_cause = cause.first['causes'].select { |e| e['_class'] == 'hudson.model.Cause$UserIdCause' }.first
-            puts 'after user_cause'
+            puts 'return if building'
             return if build['building']
-            puts 'after return'
-            puts user_cause.nil?
+            puts 'unless user_cause nil ?'
             unless user_cause.nil?
-              puts 'inside unless'
+              puts 'inside unless user_cause nil ?'
               user         = user_cause['userId'].split('@').first
+              puts 'runned'
               runned       = build['displayName']
+              puts 'build_number'
               build_number = hash[job_name]
+              puts 'started'
               started      = build['timestamp']
+              puts 'duration'
               duration     = build['duration']
+              puts 'result'
               result       = build['result']
+              puts 'url'
               url          = build['url']
 
+              puts 'unless notify mode'
               unless notify_mode = redis.get("#{user}:notify")
+                puts 'inside unless notify mode'
                 redis.set("#{user}:notify", 'false')
+                puts 'set notify mode false'
                 notify_mode = 'false'
               end
 
+              puts 'if notify_mode true'
               if notify_mode == 'true'
                 if result == 'SUCCESS'
+                  puts 'if result success'
                   color = 'good'
                 elsif result == 'FAILURE'
+                  puts 'if result failure'
                   color = 'danger'
                 else
+                  puts 'else warning'
                   color = 'warning'
                 end
 
+                puts 'started / 1000'
                 started    = started.to_i / 1000
+                puts 'duration / 1000'
                 duration   = duration.to_i / 1000
+                puts 'time'
                 time       = Time.at(started).strftime("%d-%m-%Y %H:%M:%S")
+                puts 'text'
                 text       = "Result for #{job_name} #{build_number} started on #{time} for #{runned} is #{result}\nDuration: #{duration} sec"
+                puts 'attachment'
                 attachment = Lita::Adapters::Slack::Attachment.new(
                   text, {
                     title: 'Build status',
@@ -103,30 +127,39 @@ module Lita
                     color: color
                   }
                 )
+                puts 'lita_user'
                 lita_user = Lita::User.find_by_mention_name(user)
                 # target    = Source.new(user: lita_user)
+                puts 'robot.send_attachment'
+                puts text
                 robot.chat_service.send_attachment(lita_user, attachment)
                 # robot.send_message(target, text)
               end
               # puts "#{user} #{job_name} #{runned} #{build_number} #{started} #{duration} #{result} #{url}"
             end
-            puts 'after unless'
+            puts 'after unless notify mode'
             redis.set('notify', hash.to_json)
-            puts hash[job_name]
-            puts last_build
+            puts 'process_job if hash[job_name] < last_build'
             process_job(hash, job_name, last_build, client) if hash[job_name] < last_build
           end
 
+          puts 'list_all_with_details'
           client.job.list_all_with_details.each do |jjob|
+            puts 'inside list_all_with_details'
             unless jjob['color'] == 'disabled' || jjob['color'] == 'notbuilt'
+              puts 'inside unless'
               last_build = client.job.get_builds(jjob['name']).first['number']
 
               if hash[jjob['name']]
+                puts 'if hash'
                 if hash[jjob['name']] < last_build
+                  puts 'if hash < last_build'
                   process_job(hash, jjob['name'], last_build, client)
                 end
               else
+                puts 'else if no hash'
                 hash[jjob['name']] = last_build
+                puts 'else if no hash redis set'
                 redis.set('notify', hash.to_json)
               end
             end
