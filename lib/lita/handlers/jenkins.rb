@@ -52,12 +52,23 @@ module Lita
           def process_job(hash, job_name, last_build, client)
             # if hash[jjob['name']] && hash[jjob['name']] < client.job.get_builds(jjob['name']).first['number']
             hash[job_name] += 1
-            # puts "/job/#{job_name}/#{hash[job_name]}/api/json"
-            build = client.api_get_request("/job/#{job_name}/#{hash[job_name]}/api/json")
+            puts "/job/#{job_name}/#{hash[job_name]}/api/json"
+            begin
+              build = client.api_get_request("/job/#{job_name}/#{hash[job_name]}/api/json")
+            rescue JenkinsApi::Exceptions::NotFound => e
+              redis.set('notify', hash.to_json)
+              process_job(hash, job_name, last_build, client) if hash[job_name] < last_build
+            end
+            puts build.inspect
             cause = build['actions'].select { |e| e['_class'] == 'hudson.model.CauseAction' }
+            puts 'after case'
             user_cause = cause.first['causes'].select { |e| e['_class'] == 'hudson.model.Cause$UserIdCause' }.first
+            puts 'after user_cause'
             return if build['building']
+            puts 'after return'
+            puts user_cause.nil?
             unless user_cause.nil?
+              puts 'inside unless'
               user         = user_cause['userId'].split('@').first
               runned       = build['displayName']
               build_number = hash[job_name]
@@ -99,7 +110,10 @@ module Lita
               end
               # puts "#{user} #{job_name} #{runned} #{build_number} #{started} #{duration} #{result} #{url}"
             end
+            puts 'after unless'
             redis.set('notify', hash.to_json)
+            puts hash[job_name]
+            puts last_build
             process_job(hash, job_name, last_build, client) if hash[job_name] < last_build
           end
 
