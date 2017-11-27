@@ -148,7 +148,13 @@ module Lita
             puts 'inside list_all_with_details'
             unless jjob['color'] == 'disabled' || jjob['color'] == 'notbuilt'
               puts 'inside unless'
-              last_build = client.job.get_builds(jjob['name']).first['number']
+
+              begin
+                last_build = client.job.get_builds(jjob['name']).first['number']
+              rescue Exception => e
+                puts e.message
+                puts e.backtrace.inspect
+              end
 
               if hash[jjob['name']]
                 puts 'if hash'
