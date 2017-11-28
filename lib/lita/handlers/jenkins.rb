@@ -381,6 +381,7 @@ Last build: <#{job['lastBuild']['url']}>"
             username: "#{username}@#{config.org_domain}",
             password: user_token,
             ssl: true,
+            timeout: 60,
             log_level: 3
           )
         end
