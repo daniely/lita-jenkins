@@ -152,8 +152,8 @@ module Lita
               begin
                 last_build = client.job.get_builds(jjob['name']).first['number']
               rescue Exception => e
-                puts e.message
-                puts e.backtrace.inspect
+                sleep 1
+                last_build = client.job.get_builds(jjob['name']).first['number']
               end
 
               if hash[jjob['name']]
