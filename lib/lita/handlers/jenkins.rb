@@ -73,8 +73,13 @@ module Lita
               process_job(hash, job_name, last_build, client) if hash[job_name] < last_build
             rescue Exception => e
               puts 'rescue other errors'
-              room = Lita::Room.find_by_name('#ops')
-              robot.send_message(Source.new(room: room), "Lita notifier error: #{e.message}")
+              puts e.message
+              begin
+                room = Lita::Room.find_by_name('#ops')
+                robot.send_message(Source.new(room: room), "Lita notifier error: #{e.message}")
+              rescue Exception => e
+                puts e.message
+              end
             end
             puts 'cause'
             cause = build['actions'].select { |e| e['_class'] == 'hudson.model.CauseAction' }
