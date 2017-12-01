@@ -54,8 +54,8 @@ module Lita
           begin
             client = make_client(config.notify_user)
           rescue
-            target = Source.new(room: '#ops')
-            robot.send_message(target, "Lita notifier can't create client")
+            room = Lita::Room.find_by_name('#ops')
+            robot.send_message(Source.new(room: room), "Lita notifier can't create client")
           end
 
           def process_job(hash, job_name, last_build, client)
@@ -73,7 +73,8 @@ module Lita
               process_job(hash, job_name, last_build, client) if hash[job_name] < last_build
             rescue Exception => e
               puts 'rescue other errors'
-              robot.send_message(target, "Lita notifier error: #{e.message}")
+              room = Lita::Room.find_by_name('#ops')
+              robot.send_message(Source.new(room: room), "Lita notifier error: #{e.message}")
             end
             puts 'cause'
             cause = build['actions'].select { |e| e['_class'] == 'hudson.model.CauseAction' }
@@ -161,8 +162,8 @@ module Lita
               begin
                 last_build = client.job.get_builds(jjob['name']).first['number']
               rescue Exception => e
-                target = Source.new(room: '#ops')
-                robot.send_message(target, "Lita notifier error: #{e.message}")
+                room = Lita::Room.find_by_name('#ops')
+                robot.send_message(Source.new(room: room), "Lita notifier error: #{e.message}")
                 next
               end
 
