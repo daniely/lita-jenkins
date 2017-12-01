@@ -50,7 +50,13 @@ module Lita
             hash = JSON.parse(redis.get('notify'))
           end
           puts 'client'
-          client = make_client(config.notify_user)
+
+          begin
+            client = make_client(config.notify_user)
+          rescue
+            target = Source.new(room: '#ops')
+            robot.send_message(target, "Lita notifier can't create client")
+          end
 
           def process_job(hash, job_name, last_build, client)
             puts 'inside process_job'
@@ -61,10 +67,13 @@ module Lita
               puts 'inside begin build'
               build = client.api_get_request("/job/#{job_name}/#{hash[job_name]}/api/json")
             rescue JenkinsApi::Exceptions::NotFound => e
-              puts 'resuce begin build resdis set'
+              puts 'resuce begin build redis set'
               redis.set('notify', hash.to_json)
               puts 'again run process_job'
               process_job(hash, job_name, last_build, client) if hash[job_name] < last_build
+            rescue Exception => e
+              puts 'rescue other errors'
+              robot.send_message(target, "Lita notifier error: #{e.message}")
             end
             puts 'cause'
             cause = build['actions'].select { |e| e['_class'] == 'hudson.model.CauseAction' }
@@ -152,8 +161,9 @@ module Lita
               begin
                 last_build = client.job.get_builds(jjob['name']).first['number']
               rescue Exception => e
-                sleep 1
-                last_build = client.job.get_builds(jjob['name']).first['number']
+                target = Source.new(room: '#ops')
+                robot.send_message(target, "Lita notifier error: #{e.message}")
+                next
               end
 
               if hash[jjob['name']]
