@@ -75,7 +75,7 @@ module Lita
               puts 'rescue other errors'
               puts e.message
               begin
-                room = Lita::Room.find_by_name('#ops')
+                room = Lita::Room.find_by_name('ops')
                 robot.send_message(Source.new(room: room), "Lita notifier error: #{e.message}")
               rescue Exception => e
                 puts e.message
@@ -155,6 +155,7 @@ module Lita
             puts 'after unless notify mode'
             redis.set('notify', hash.to_json)
             puts 'process_job if hash[job_name] < last_build'
+            puts hash[job_name] < last_build
             process_job(hash, job_name, last_build, client) if hash[job_name] < last_build
           end
 
@@ -165,10 +166,16 @@ module Lita
               puts 'inside unless'
 
               begin
+                puts 'begin last_build'
                 last_build = client.job.get_builds(jjob['name']).first['number']
               rescue Exception => e
-                room = Lita::Room.find_by_name('#ops')
-                robot.send_message(Source.new(room: room), "Lita notifier error: #{e.message}")
+                puts 'rescue last_build'
+                begin
+                  room = Lita::Room.find_by_name('#ops')
+                  robot.send_message(Source.new(room: room), "Lita notifier error: #{e.message}")
+                rescue Exception => e
+                  puts e.message
+                end
                 next
               end
 
