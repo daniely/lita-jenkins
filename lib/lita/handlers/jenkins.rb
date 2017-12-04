@@ -71,6 +71,7 @@ module Lita
               redis.set('notify', hash.to_json)
               puts 'again run process_job'
               process_job(hash, job_name, last_build, client) if hash[job_name] < last_build
+              return
             rescue Exception => e
               puts 'rescue other errors'
               puts e.message
