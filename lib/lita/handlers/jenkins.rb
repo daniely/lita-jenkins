@@ -13,7 +13,7 @@ module Lita
       config :org_domain, required: true
       config :notify_user, required: true
 
-      route /j(?:enkins)?(\W+)?a(?:uth)?(\W+)?(check|set|del)_token( (.+))?/i, :auth, command: true, help: {
+      route /j(?:enkins)? a(?:uth)? (check|set|del)_token( (.+))?/i, :auth, command: true, help: {
         'j(enkins) a(uth) {check|set|del}_token' => 'Check, set or delete your token for playing with Jenkins'
       }
 
@@ -29,7 +29,7 @@ module Lita
         'jenkins show <job_name>' => 'Shows info for <job_name> job'
       }
 
-      route /j(?:enkins)?(\W+)?b(?:uild)?(\W+)?([\w\-]+)( (.+))?/i, :build, command: true, help: {
+      route /j(?:enkins)? b(?:uild)? ([\w\-]+)( (.+))?/i, :build, command: true, help: {
         'jenkins b(uild) <job_name> param:value,param2:value2' => 'Builds the job specified by name'
       }
 
