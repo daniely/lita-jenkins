@@ -13,7 +13,7 @@ module Lita
       config :org_domain, required: true
       config :notify_user, required: true
 
-      route /j(?:enkins)? a(?:uth)? (check|set|del)_token( (.+))?/i, :auth, command: true, help: {
+      route /j(?:enkins)?(\W+)?a(?:uth)?(\W+)?(check|set|del)_token( (.+))?/i, :auth, command: true, help: {
         'j(enkins) a(uth) {check|set|del}_token' => 'Check, set or delete your token for playing with Jenkins'
       }
 
@@ -29,7 +29,7 @@ module Lita
         'jenkins show <job_name>' => 'Shows info for <job_name> job'
       }
 
-      route /j(?:enkins)? b(?:uild)? ([\w\-]+)( (.+))?/i, :build, command: true, help: {
+      route /j(?:enkins)?(\W+)?b(?:uild)?(\W+)?([\w\-]+)( (.+))?/i, :build, command: true, help: {
         'jenkins b(uild) <job_name> param:value,param2:value2' => 'Builds the job specified by name'
       }
 
@@ -42,99 +42,71 @@ module Lita
       def loop(response)
         every(10) do |timer|
           begin
-            puts 'begin hash'
             hash = JSON.parse(redis.get('notify'))
           rescue Exception => e
-            puts 'rescue hash'
             redis.set('notify', {}.to_json)
             hash = JSON.parse(redis.get('notify'))
           end
-          puts 'client'
+
+          log.debug 'Make client for notify'
 
           begin
             client = make_client(config.notify_user)
           rescue
-            room = Lita::Room.find_by_name('#ops')
-            robot.send_message(Source.new(room: room), "Lita notifier can't create client")
+            sleep 60
+            client = make_client(config.notify_user)
           end
 
           def process_job(hash, job_name, last_build, client)
-            puts 'inside process_job'
-            # if hash[jjob['name']] && hash[jjob['name']] < client.job.get_builds(jjob['name']).first['number']
+            log.debug 'Inside process_job'
             hash[job_name] += 1
-            puts "/job/#{job_name}/#{hash[job_name]}/api/json"
+            log.debug "/job/#{job_name}/#{hash[job_name]}/api/json"
             begin
-              puts 'inside begin build'
+              log.debug 'Inside begin build'
               build = client.api_get_request("/job/#{job_name}/#{hash[job_name]}/api/json")
             rescue JenkinsApi::Exceptions::NotFound => e
-              puts 'resuce begin build redis set'
+              log.debug 'Resuce begin build redis set'
               redis.set('notify', hash.to_json)
-              puts 'again run process_job'
+              log.debug 'Again run process_job'
               process_job(hash, job_name, last_build, client) if hash[job_name] < last_build
               return
             rescue Exception => e
-              puts 'rescue other errors'
-              puts e.message
-              begin
-                room = Lita::Room.find_by_name('ops')
-                robot.send_message(Source.new(room: room), "Lita notifier error: #{e.message}")
-              rescue Exception => e
-                puts e.message
-              end
+              log.debug 'Rescue other errors'
+              log.debug e.message
+              return
             end
-            puts 'cause'
             cause = build['actions'].select { |e| e['_class'] == 'hudson.model.CauseAction' }
-            puts 'user_cause'
             user_cause = cause.first['causes'].select { |e| e['_class'] == 'hudson.model.Cause$UserIdCause' }.first
-            puts 'return if building'
             return if build['building']
-            puts 'unless user_cause nil ?'
             unless user_cause.nil?
-              puts 'inside unless user_cause nil ?'
               user         = user_cause['userId'].split('@').first
-              puts 'runned'
               runned       = build['displayName']
-              puts 'build_number'
               build_number = hash[job_name]
-              puts 'started'
               started      = build['timestamp']
-              puts 'duration'
               duration     = build['duration']
-              puts 'result'
               result       = build['result']
-              puts 'url'
               url          = build['url']
 
-              puts 'unless notify mode'
               unless notify_mode = redis.get("#{user}:notify")
-                puts 'inside unless notify mode'
+                log.debug 'Inside unless notify mode'
                 redis.set("#{user}:notify", 'false')
-                puts 'set notify mode false'
+                log.debug 'Set notify mode false'
                 notify_mode = 'false'
               end
 
-              puts 'if notify_mode true'
               if notify_mode == 'true'
                 if result == 'SUCCESS'
-                  puts 'if result success'
                   color = 'good'
                 elsif result == 'FAILURE'
-                  puts 'if result failure'
                   color = 'danger'
                 else
-                  puts 'else warning'
                   color = 'warning'
                 end
 
-                puts 'started / 1000'
                 started    = started.to_i / 1000
-                puts 'duration / 1000'
                 duration   = duration.to_i / 1000
-                puts 'time'
                 time       = Time.at(started).strftime("%d-%m-%Y %H:%M:%S")
-                puts 'text'
                 text       = "Result for #{job_name} #{build_number} started on #{time} for #{runned} is #{result}\nDuration: #{duration} sec"
-                puts 'attachment'
                 attachment = Lita::Adapters::Slack::Attachment.new(
                   text, {
                     title: 'Build status',
@@ -143,53 +115,37 @@ module Lita
                     color: color
                   }
                 )
-                puts 'lita_user'
                 lita_user = Lita::User.find_by_mention_name(user)
-                # target    = Source.new(user: lita_user)
-                puts 'robot.send_attachment'
-                puts text
+                log.info text
                 robot.chat_service.send_attachment(lita_user, attachment)
-                # robot.send_message(target, text)
               end
-              # puts "#{user} #{job_name} #{runned} #{build_number} #{started} #{duration} #{result} #{url}"
             end
-            puts 'after unless notify mode'
             redis.set('notify', hash.to_json)
-            puts 'process_job if hash[job_name] < last_build'
-            puts hash[job_name] < last_build
             process_job(hash, job_name, last_build, client) if hash[job_name] < last_build
           end
 
-          puts 'list_all_with_details'
+          log.debug 'List_all_with_details'
           client.job.list_all_with_details.each do |jjob|
-            puts 'inside list_all_with_details'
+            log.debug 'Inside list_all_with_details'
             unless jjob['color'] == 'disabled' || jjob['color'] == 'notbuilt'
-              puts 'inside unless'
+              log.debug 'Inside unless'
 
               begin
-                puts 'begin last_build'
                 last_build = client.job.get_builds(jjob['name']).first['number']
               rescue Exception => e
-                puts 'rescue last_build'
-                begin
-                  room = Lita::Room.find_by_name('#ops')
-                  robot.send_message(Source.new(room: room), "Lita notifier error: #{e.message}")
-                rescue Exception => e
-                  puts e.message
-                end
+                puts e.message
                 next
               end
 
               if hash[jjob['name']]
-                puts 'if hash'
+                log.debug 'if hash'
                 if hash[jjob['name']] < last_build
-                  puts 'if hash < last_build'
+                  log.debug 'If hash < last_build'
                   process_job(hash, jjob['name'], last_build, client)
                 end
               else
-                puts 'else if no hash'
+                log.debug 'else if no hash'
                 hash[jjob['name']] = last_build
-                puts 'else if no hash redis set'
                 redis.set('notify', hash.to_json)
               end
             end
