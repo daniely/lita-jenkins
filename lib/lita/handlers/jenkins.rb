@@ -33,7 +33,7 @@ module Lita
         'jenkins b(uild) <job_name> param:value,param2:value2' => 'Builds the job specified by name'
       }
 
-      route /j(?:enkins)?(\W+)?d(?:eploy)?(\W+)?([\w\-\.]+)(\W+)?([\w\-\,]+)?(\W+)?to(\W+)?([\w\-]+)/i, :deploy, command: true, help: {
+      route /j(?:enkins)?(\W+)?d(?:eploy)?(\W+)?([\w\-\.]+)(\W+)?([\w\-\,]+)?(\W+)?to(\W+)?([\w\-]+)(\W+)?([\w]+)?/i, :deploy, command: true, help: {
         'jenkins d(eploy) <branch> <project1,project2> to <stage>' => 'Start dynamic deploy with params. Не выбранный бренч, зальет версию продакшна.'
       }
 
@@ -155,20 +155,27 @@ module Lita
 
       def deploy(response)
         params     = response.matches.last.reject(&:blank?) #["OTT-123", "avia", "sandbox-15"]
-        project    = params[1]
+        project    = ''
         branch     = ''
         stage      = ''
+        flag       = nil
         job_name   = 'dynamic_deploy'
         job_params = {}
         opts       = { 'build_start_timeout': 30 }
         username   = response.user.mention_name
 
-
         if params.size == 3
-          branch = params[0]
-          stage  = params[2]
+          branch  = params[0]
+          project = params[1]
+          stage   = params[2]
         elsif params.size == 2
-          stage  = params[1]
+          project = params[0]
+          stage   = params[1]
+        elsif params.size == 4
+          branch  = params[0]
+          project = params[1]
+          stage   = params[2]
+          flag    = params[3]
         else
           response.reply 'Something wrong with params :fire:'
           return
@@ -181,10 +188,33 @@ module Lita
         }
 
         project.split(',').each do |proj|
-          job_params['PROJECTS'][proj.upcase] = {
-            'ENABLE' => true,
-            'BRANCH' => branch
-          }
+          if flag.nil?
+            job_params['PROJECTS'][proj.upcase] = {
+              'ENABLE' => true,
+              'BRANCH' => branch
+            }
+          else
+            if flag == 'migrate'
+              job_params['PROJECTS'][proj.upcase] = {
+                'ENABLE' => true,
+                'BRANCH' => branch,
+                'ExtraOpts' => {
+                  'DBMIGRATION' => true
+                }
+              }
+            elsif flag == 'rollback'
+              job_params['PROJECTS'][proj.upcase] = {
+                'ENABLE' => true,
+                'BRANCH' => branch,
+                'ExtraOpts' => {
+                  'DBROLLBACK' => true
+                }
+              }
+            else
+              response.reply 'Something wrong with flag (it is a last param) :fire:'
+              return
+            end
+          end
         end
 
         client = make_client(username)
