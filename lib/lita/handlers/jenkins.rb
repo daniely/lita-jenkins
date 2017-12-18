@@ -40,115 +40,121 @@ module Lita
       on :loaded, :loop
 
       def loop(response)
+        Thread.abort_on_exception = true
         every(10) do |timer|
           begin
-            hash = JSON.parse(redis.get('notify'))
-          rescue Exception => e
-            redis.set('notify', {}.to_json)
-            hash = JSON.parse(redis.get('notify'))
-          end
-
-          log.debug 'Make client for notify'
-
-          begin
-            client = make_client(config.notify_user)
-          rescue
-            sleep 60
-            client = make_client(config.notify_user)
-          end
-
-          def process_job(hash, job_name, last_build, client)
-            log.debug 'Inside process_job'
-            hash[job_name] += 1
-            log.debug "/job/#{job_name}/#{hash[job_name]}/api/json"
             begin
-              log.debug 'Inside begin build'
-              build = client.api_get_request("/job/#{job_name}/#{hash[job_name]}/api/json")
-            rescue JenkinsApi::Exceptions::NotFound => e
-              log.debug 'Resuce begin build redis set'
-              redis.set('notify', hash.to_json)
-              log.debug 'Again run process_job'
-              process_job(hash, job_name, last_build, client) if hash[job_name] < last_build
-              return
+              hash = JSON.parse(redis.get('notify'))
             rescue Exception => e
-              log.debug 'Rescue other errors'
-              log.debug e.message
-              return
+              redis.set('notify', {}.to_json)
+              hash = JSON.parse(redis.get('notify'))
             end
-            cause = build['actions'].select { |e| e['_class'] == 'hudson.model.CauseAction' }
-            user_cause = cause.first['causes'].select { |e| e['_class'] == 'hudson.model.Cause$UserIdCause' }.first
-            return if build['building']
-            unless user_cause.nil?
-              user         = user_cause['userId'].split('@').first
-              runned       = build['displayName']
-              build_number = hash[job_name]
-              started      = build['timestamp']
-              duration     = build['duration']
-              result       = build['result']
-              url          = build['url']
 
-              unless notify_mode = redis.get("#{user}:notify")
-                log.debug 'Inside unless notify mode'
-                redis.set("#{user}:notify", 'false')
-                log.debug 'Set notify mode false'
-                notify_mode = 'false'
-              end
+            log.debug 'Make client for notify'
 
-              if notify_mode == 'true'
-                if result == 'SUCCESS'
-                  color = 'good'
-                elsif result == 'FAILURE'
-                  color = 'danger'
-                else
-                  color = 'warning'
-                end
-
-                started    = started.to_i / 1000
-                duration   = duration.to_i / 1000
-                time       = Time.at(started).strftime("%d-%m-%Y %H:%M:%S")
-                text       = "Result for #{job_name} #{build_number} started on #{time} for #{runned} is #{result}\nDuration: #{duration} sec"
-                attachment = Lita::Adapters::Slack::Attachment.new(
-                  text, {
-                    title: 'Build status',
-                    title_link: url,
-                    text: text,
-                    color: color
-                  }
-                )
-                lita_user = Lita::User.find_by_mention_name(user)
-                log.info text
-                robot.chat_service.send_attachment(lita_user, attachment)
-              end
+            begin
+              client = make_client(config.notify_user)
+            rescue
+              sleep 60
+              client = make_client(config.notify_user)
             end
-            redis.set('notify', hash.to_json)
-            process_job(hash, job_name, last_build, client) if hash[job_name] < last_build
-          end
 
-          log.debug 'List_all_with_details'
-          client.job.list_all_with_details.each do |jjob|
-            log.debug 'Inside list_all_with_details'
-            unless jjob['color'] == 'disabled' || jjob['color'] == 'notbuilt'
-              log.debug 'Inside unless'
-
+            def process_job(hash, job_name, last_build, client)
+              log.debug 'Inside process_job'
+              hash[job_name] += 1
+              log.debug "/job/#{job_name}/#{hash[job_name]}/api/json"
               begin
-                last_build = client.job.get_builds(jjob['name']).first['number']
-              rescue Exception => e
-                puts e.message
-                next
-              end
-
-              if hash[jjob['name']]
-                log.debug 'if hash'
-                if hash[jjob['name']] < last_build
-                  log.debug 'If hash < last_build'
-                  process_job(hash, jjob['name'], last_build, client)
-                end
-              else
-                log.debug 'else if no hash'
-                hash[jjob['name']] = last_build
+                log.debug 'Inside begin build'
+                build = client.api_get_request("/job/#{job_name}/#{hash[job_name]}/api/json")
+              rescue JenkinsApi::Exceptions::NotFound => e
+                log.debug 'Resuce begin build redis set'
                 redis.set('notify', hash.to_json)
+                log.debug 'Again run process_job'
+                process_job(hash, job_name, last_build, client) if hash[job_name] < last_build
+                return
+              rescue Exception => e
+                log.debug 'Rescue other errors'
+                log.debug e.message
+                return
+              end
+              cause = build['actions'].select { |e| e['_class'] == 'hudson.model.CauseAction' }
+              user_cause = cause.first['causes'].select { |e| e['_class'] == 'hudson.model.Cause$UserIdCause' }.first
+              return if build['building']
+              unless user_cause.nil?
+                user         = user_cause['userId'].split('@').first
+                runned       = build['displayName']
+                build_number = hash[job_name]
+                started      = build['timestamp']
+                duration     = build['duration']
+                result       = build['result']
+                url          = build['url']
+
+                unless notify_mode = redis.get("#{user}:notify")
+                  log.debug 'Inside unless notify mode'
+                  redis.set("#{user}:notify", 'false')
+                  log.debug 'Set notify mode false'
+                  notify_mode = 'false'
+                end
+
+                if notify_mode == 'true'
+                  if result == 'SUCCESS'
+                    color = 'good'
+                  elsif result == 'FAILURE'
+                    color = 'danger'
+                  else
+                    color = 'warning'
+                  end
+
+                  started    = started.to_i / 1000
+                  duration   = duration.to_i / 1000
+                  time       = Time.at(started).strftime("%d-%m-%Y %H:%M:%S")
+                  text       = "Result for #{job_name} #{build_number} started on #{time} for #{runned} is #{result}\nDuration: #{duration} sec"
+                  attachment = Lita::Adapters::Slack::Attachment.new(
+                    text, {
+                      title: 'Build status',
+                      title_link: url,
+                      text: text,
+                      color: color
+                    }
+                  )
+                  lita_user = Lita::User.find_by_mention_name(user)
+                  log.info text
+                  robot.chat_service.send_attachment(lita_user, attachment)
+                end
+              end
+              redis.set('notify', hash.to_json)
+              process_job(hash, job_name, last_build, client) if hash[job_name] < last_build
+            end
+
+            log.debug 'List_all_with_details'
+            client.job.list_all_with_details.each do |jjob|
+              log.debug 'Inside list_all_with_details'
+              unless jjob['color'] == 'disabled' || jjob['color'] == 'notbuilt'
+                log.debug 'Inside unless'
+
+                begin
+                  last_build = client.job.get_builds(jjob['name']).first['number']
+                rescue Exception => e
+                  puts e.message
+                  next
+                end
+
+                if hash[jjob['name']]
+                  log.debug 'if hash'
+                  if hash[jjob['name']] < last_build
+                    log.debug 'If hash < last_build'
+                    process_job(hash, jjob['name'], last_build, client)
+                  end
+                else
+                  log.debug 'else if no hash'
+                  hash[jjob['name']] = last_build
+                  redis.set('notify', hash.to_json)
+                end
               end
             end
+          rescue Exception => e
+            log.debug "Error in notify thread: #{e}"
+            self.loop('again')
           end
         end
       end
