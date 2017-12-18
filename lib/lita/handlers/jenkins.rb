@@ -46,6 +46,7 @@ module Lita
             begin
               hash = JSON.parse(redis.get('notify'))
             rescue Exception => e
+              log.error "Error when getting hash: #{e}"
               redis.set('notify', {}.to_json)
               hash = JSON.parse(redis.get('notify'))
             end
@@ -55,6 +56,8 @@ module Lita
             begin
               client = make_client(config.notify_user)
             rescue
+              log.error "Error when make_client: #{e}"
+              log.error "Will try again after 60 seconds"
               sleep 60
               client = make_client(config.notify_user)
             end
@@ -74,7 +77,7 @@ module Lita
                 return
               rescue Exception => e
                 log.debug 'Rescue other errors'
-                log.debug e.message
+                log.error e.message
                 return
               end
               cause = build['actions'].select { |e| e['_class'] == 'hudson.model.CauseAction' }
@@ -153,7 +156,7 @@ module Lita
               end
             end
           rescue Exception => e
-            log.debug "Error in notify thread: #{e}"
+            log.error "Error in notify thread: #{e}"
             self.loop('again')
           end
         end
