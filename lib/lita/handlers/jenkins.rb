@@ -65,26 +65,28 @@ module Lita
               log.debug "Will process #{job_name}. Last build #{last_build}"
               hash[job_name] += 1
 
+              job_id = "#{job_name}_#{hash[job_name]}"
+
               begin
-                log.debug "Getting build info for url /job/#{job_name}/#{hash[job_name]}/api/json"
+                log.debug "#{job_id} Getting build info for url /job/#{job_name}/#{hash[job_name]}/api/json"
 
                 build = client.api_get_request("/job/#{job_name}/#{hash[job_name]}/api/json")
               rescue JenkinsApi::Exceptions::NotFound => e
-                log.debug 'Build info not found, will skip'
+                log.debug "#{job_id} Build info not found, will skip"
                 redis.set('notify', hash.to_json)
 
-                log.debug 'Again run process_job'
+                log.debug "#{job_id} Again run process_job"
                 process_job(hash, job_name, last_build, client) if hash[job_name] < last_build
 
                 return
               rescue Exception => e
-                log.error "Can't get build info bcs: #{e.message}"
+                log.error "#{job_id} Can't get build info bcs: #{e.message}"
 
                 return
               end
 
               if build['building']
-                log.debug 'Job in building state will skip'
+                log.debug "#{job_id} Job in building state will skip"
                 return
               end
 
@@ -92,7 +94,7 @@ module Lita
               user_cause = cause.first['causes'].select { |e| e['_class'] == 'hudson.model.Cause$UserIdCause' }.first
 
               unless user_cause.nil?
-                log.debug "Job cause by user #{user_cause['userId']}"
+                log.debug "#{job_id} Job cause by user #{user_cause['userId']}"
 
                 user         = user_cause['userId'].split('@').first
                 runned       = build['displayName']
@@ -111,18 +113,18 @@ module Lita
                   result: result,
                   url: url
                 }
-                log.debug debug_text.to_json
+                log.debug "#{job_id} #{debug_text}"
 
                 unless notify_mode = redis.get("#{user}:notify")
-                  log.debug 'No notify mode choosen for user'
+                  log.debug "#{job_id} No notify mode choosen for user"
                   redis.set("#{user}:notify", 'false')
 
-                  log.debug 'Set notify mode false'
+                  log.debug "#{job_id} Set notify mode false"
                   notify_mode = 'false'
                 end
 
                 if notify_mode == 'true'
-                  log.debug 'Notify mode true will notify'
+                  log.debug "#{job_id} Notify mode true will notify"
 
                   if result == 'SUCCESS'
                     color = 'good'
@@ -146,21 +148,21 @@ module Lita
                   )
                   lita_user = Lita::User.find_by_mention_name(user)
                   log_text  = {for_user: user, message: text}
-                  log.info log_text.to_json
+                  log.info "#{job_id} #{log_text}"
                   robot.chat_service.send_attachment(lita_user, attachment)
                 end
               end
-              log.debug 'Finished'
+              log.debug "#{job_id} Finished"
               redis.set('notify', hash.to_json)
-              log.debug 'Hash saved to redis'
+              log.debug "#{job_id} Hash saved to redis"
 
               if hash[job_name] < last_build
-                log.debug "Still #{hash[job_name]} < #{last_build}. Will run process_job again."
+                log.debug "#{job_id} Still #{hash[job_name]} < #{last_build}. Will run process_job again."
                 process_job(hash, job_name, last_build, client)
               end
             end
 
-            log.debug 'Start getting all jobs'
+            log.debug 'Start getting jobs'
             client.job.list_all_with_details.each do |jjob|
               unless jjob['color'] == 'disabled' || jjob['color'] == 'notbuilt'
                 log.debug "Job color is #{jjob['color']}. Will work on it."
