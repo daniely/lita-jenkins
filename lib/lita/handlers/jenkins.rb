@@ -74,7 +74,7 @@ module Lita
                 redis.set('notify', hash.to_json)
 
                 log.debug 'Again run process_job'
-                process_job(hash, job_name, last_build, client) if hash[job_name] < last_build
+                process_job(hash, job_name, last_build, client) if hash[job_name] <= last_build
 
                 return
               rescue Exception => e
@@ -154,7 +154,7 @@ module Lita
               redis.set('notify', hash.to_json)
               log.debug 'Hash saved to redis'
 
-              if hash[job_name] < last_build
+              if hash[job_name] <= last_build
                 log.debug "Still #{hash[job_name]} < #{last_build}. Will run process_job again."
                 process_job(hash, job_name, last_build, client)
               end
@@ -175,7 +175,7 @@ module Lita
                 if hash[jjob['name']]
                   log.debug "#{jjob['name']} already in hash"
 
-                  if hash[jjob['name']] < last_build
+                  if hash[jjob['name']] <= last_build
                     log.debug "#{hash[jjob['name']]} < #{last_build}. Will process_job"
                     process_job(hash, jjob['name'], last_build, client)
                   end
