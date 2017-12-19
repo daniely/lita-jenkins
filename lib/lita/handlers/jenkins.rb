@@ -46,45 +46,54 @@ module Lita
             begin
               hash = JSON.parse(redis.get('notify'))
             rescue Exception => e
-              log.error "Error when getting hash: #{e}"
+              log.error "Error when getting hash: #{e.message}"
               redis.set('notify', {}.to_json)
               hash = JSON.parse(redis.get('notify'))
             end
 
-            log.debug 'Make client for notify'
-
             begin
+              log.debug 'Make client for notify'
               client = make_client(config.notify_user)
-            rescue
-              log.error "Error when make_client: #{e}"
+            rescue Exception => e
+              log.error "Error when make_client: #{e.message}"
               log.error "Will try again after 60 seconds"
               sleep 60
               client = make_client(config.notify_user)
             end
 
             def process_job(hash, job_name, last_build, client)
-              log.debug 'Inside process_job'
+              log.debug "Will process #{job_name}. Last build #{last_build}"
               hash[job_name] += 1
-              log.debug "/job/#{job_name}/#{hash[job_name]}/api/json"
+
               begin
-                log.debug 'Inside begin build'
+                log.debug "Getting build info for url /job/#{job_name}/#{hash[job_name]}/api/json"
+
                 build = client.api_get_request("/job/#{job_name}/#{hash[job_name]}/api/json")
               rescue JenkinsApi::Exceptions::NotFound => e
-                log.debug 'Resuce begin build redis set'
+                log.debug 'Build info not found, will skip'
                 redis.set('notify', hash.to_json)
+
                 log.debug 'Again run process_job'
                 process_job(hash, job_name, last_build, client) if hash[job_name] < last_build
+
                 return
               rescue Exception => e
-                log.debug 'Rescue other errors'
-                log.error e.message
+                log.error "Can't get build info bcs: #{e.message}"
+
                 return
               end
-              cause = build['actions'].select { |e| e['_class'] == 'hudson.model.CauseAction' }
+
+              if build['building']
+                log.debug 'Job in building state will skip'
+                return
+              end
+
+              cause      = build['actions'].select { |e| e['_class'] == 'hudson.model.CauseAction' }
               user_cause = cause.first['causes'].select { |e| e['_class'] == 'hudson.model.Cause$UserIdCause' }.first
-              return if build['building']
+
               unless user_cause.nil?
-                log.debug 'Inside unless user_cause.nil?'
+                log.debug "Job cause by user #{user_cause['userId']}"
+
                 user         = user_cause['userId'].split('@').first
                 runned       = build['displayName']
                 build_number = hash[job_name]
@@ -93,14 +102,28 @@ module Lita
                 result       = build['result']
                 url          = build['url']
 
+                debug_text = {
+                  user: user,
+                  runned: runned,
+                  build_number: build_number,
+                  started: started,
+                  duration: duration,
+                  result: result,
+                  url: url
+                }
+                log.debug debug_text.to_json
+
                 unless notify_mode = redis.get("#{user}:notify")
-                  log.debug 'Inside unless notify mode'
+                  log.debug 'No notify mode choosen for user'
                   redis.set("#{user}:notify", 'false')
+
                   log.debug 'Set notify mode false'
                   notify_mode = 'false'
                 end
 
                 if notify_mode == 'true'
+                  log.debug 'Notify mode true will notify'
+
                   if result == 'SUCCESS'
                     color = 'good'
                   elsif result == 'FAILURE'
@@ -122,37 +145,46 @@ module Lita
                     }
                   )
                   lita_user = Lita::User.find_by_mention_name(user)
-                  log.info text
+                  log_text  = {for_user: user, message: text}
+                  log.info log_text.to_json
                   robot.chat_service.send_attachment(lita_user, attachment)
                 end
               end
+              log.debug 'Finished'
               redis.set('notify', hash.to_json)
-              process_job(hash, job_name, last_build, client) if hash[job_name] < last_build
+              log.debug 'Hash saved to redis'
+
+              if hash[job_name] < last_build
+                log.debug "Still #{hash[job_name]} < #{last_build}. Will run process_job again."
+                process_job(hash, job_name, last_build, client)
+              end
             end
 
-            log.debug 'List_all_with_details'
+            log.debug 'Start getting all jobs'
             client.job.list_all_with_details.each do |jjob|
-              log.debug 'Inside list_all_with_details'
               unless jjob['color'] == 'disabled' || jjob['color'] == 'notbuilt'
-                log.debug 'Inside unless'
+                log.debug "Job color is #{jjob['color']}. Will work on it."
 
                 begin
                   last_build = client.job.get_builds(jjob['name']).first['number']
                 rescue Exception => e
-                  puts e.message
+                  log.error "Can't get last_build bcs: #{e.message}"
                   next
                 end
 
                 if hash[jjob['name']]
-                  log.debug 'if hash'
+                  log.debug "#{jjob['name']} already in hash"
+
                   if hash[jjob['name']] < last_build
-                    log.debug 'If hash < last_build'
+                    log.debug "#{hash[jjob['name']]} < #{last_build}. Will process_job"
                     process_job(hash, jjob['name'], last_build, client)
                   end
                 else
-                  log.debug 'else if no hash'
+                  log.debug "No #{jjob['name']} in hash"
                   hash[jjob['name']] = last_build
+                  log.debug "#{last_build} as hash value"
                   redis.set('notify', hash.to_json)
+                  log.debug 'Hash saved to redis'
                 end
               end
             end
