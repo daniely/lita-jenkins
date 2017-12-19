@@ -84,6 +84,7 @@ module Lita
               user_cause = cause.first['causes'].select { |e| e['_class'] == 'hudson.model.Cause$UserIdCause' }.first
               return if build['building']
               unless user_cause.nil?
+                log.debug 'Inside unless user_cause.nil?'
                 user         = user_cause['userId'].split('@').first
                 runned       = build['displayName']
                 build_number = hash[job_name]
