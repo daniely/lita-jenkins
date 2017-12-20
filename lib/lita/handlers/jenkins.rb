@@ -44,7 +44,7 @@ module Lita
         every(10) do |timer|
           begin
 
-            log.debug 'Make client for notify'
+            log.info 'Make client for notify'
             client = make_client(config.notify_user)
 
             log.debug 'Check if hist empty'
@@ -84,9 +84,21 @@ module Lita
             end
 
             # Worker
+            jobs_in_queue_wait = redis.keys('notify:queue_wait:*')
+            if jobs_in_queue_wait.empty?
+              log.debug 'Notify: No jobs in queue_wait'
+            else
+              jobs_in_queue_wait.each do |job|
+                job_name = job.split(':').last
+                until redis.llen job == 0
+                  redis.rpoplpush job "notify:queue:#{job_name}"
+                end
+              end
+            end
+
             jobs_in_queue = redis.keys('notify:queue:*')
             if jobs_in_queue.empty?
-              log.info 'Notify: No jobs in queue'
+              log.debug 'Notify: No jobs in queue'
             else
               jobs_in_queue.each do |job|
                 def process_job(build_number, job_name, client)
@@ -104,7 +116,7 @@ module Lita
 
                   if build['building']
                     log.debug "#{job_id} Job is building will skip"
-                    redis.rpush "notify:queue_wait:#{job_name}", build_number
+                    redis.lpush "notify:queue_wait:#{job_name}", build_number
                     return
                   end
 
@@ -178,13 +190,13 @@ module Lita
 
                 job_name = job.split(':').last
 
-                build_number = redis.lpop "notify:queue_wait:#{job_name}"
-                until build_number.nil?
-                  log.debug 'Sleep little bit because job is building'
-                  sleep 30
-                  process_job(build_number, job_name, client)
-                  build_number = redis.lpop "notify:queue_wait:#{job_name}"
-                end
+                # build_number = redis.lpop "notify:queue_wait:#{job_name}"
+                # until build_number.nil?
+                #   log.debug 'Sleep little bit because job is building'
+                #   sleep 30
+                #   process_job(build_number, job_name, client)
+                #   build_number = redis.lpop "notify:queue_wait:#{job_name}"
+                # end
 
                 build_number = redis.lpop job
                 until build_number.nil?
