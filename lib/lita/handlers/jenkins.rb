@@ -89,7 +89,7 @@ module Lita
               log.info 'Notify: No jobs in queue'
             else
               jobs_in_queue.each do |job|
-                def process_job(build_number, job_name)
+                def process_job(build_number, job_name, client)
                   job_id = "#{job_name}:#{build_number}"
 
                   url = "/job/#{job_name}/#{build_number}/api/json"
@@ -180,13 +180,13 @@ module Lita
 
                 build_number = redis.lpop "notify:queue_wait:#{job_name}"
                 until build_number.nil?
-                  process_job(build_number, job_name)
+                  process_job(build_number, job_namem, client)
                   build_number = redis.lpop "notify:queue_wait:#{job_name}"
                 end
 
                 build_number = redis.lpop job
                 until build_number.nil?
-                  process_job(build_number, job_name)
+                  process_job(build_number, job_name, client)
                   build_number = redis.lpop job
                 end
               end
