@@ -114,16 +114,16 @@ module Lita
                     redis.rpush "notify:hist:#{job_name}", build_number
                   end
 
-                  if build['building']
-                    log.debug "#{job_id} Job is building will skip"
-                    redis.lpush "notify:queue_wait:#{job_name}", build_number
-                    return
-                  end
-
                   cause      = build['actions'].select { |e| e['_class'] == 'hudson.model.CauseAction' }
                   user_cause = cause.first['causes'].select { |e| e['_class'] == 'hudson.model.Cause$UserIdCause' }.first
 
                   unless user_cause.nil?
+                    if build['building']
+                      log.debug "#{job_id} Job is building will skip"
+                      redis.lpush "notify:queue_wait:#{job_name}", build_number
+                      return
+                    end
+
                     log.debug "#{job_id} Job cause by user #{user_cause['userId']}"
 
                     user     = user_cause['userId'].split('@').first
@@ -177,7 +177,7 @@ module Lita
                       )
                       lita_user = Lita::User.find_by_mention_name(user)
                       debug_text  = {for_user: user, message: text}
-                      log.debug "#{job_id} #{debug_text}"
+                      log.info "#{job_id} #{debug_text}"
                       robot.chat_service.send_attachment(lita_user, attachment)
                     end
                   else
