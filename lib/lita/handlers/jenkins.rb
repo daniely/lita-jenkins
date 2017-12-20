@@ -180,7 +180,7 @@ module Lita
 
                 build_number = redis.lpop "notify:queue_wait:#{job_name}"
                 until build_number.nil?
-                  process_job(build_number, job_namem, client)
+                  process_job(build_number, job_name, client)
                   build_number = redis.lpop "notify:queue_wait:#{job_name}"
                 end
 
