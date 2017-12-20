@@ -43,150 +43,151 @@ module Lita
         Thread.abort_on_exception = true
         every(10) do |timer|
           begin
-            begin
-              hash = JSON.parse(redis.get('notify'))
-            rescue Exception => e
-              log.error "Error when getting hash: #{e.message}"
-              redis.set('notify', {}.to_json)
-              hash = JSON.parse(redis.get('notify'))
-            end
 
-            begin
-              log.debug 'Make client for notify'
-              client = make_client(config.notify_user)
-            rescue Exception => e
-              log.error "Error when make_client: #{e.message}"
-              log.error "Will try again after 60 seconds"
-              sleep 60
-              client = make_client(config.notify_user)
-            end
+            log.debug 'Make client for notify'
+            client = make_client(config.notify_user)
 
-            def process_job(hash, job_name, last_build, client)
-              log.debug "Will process #{job_name}. Last build #{last_build}"
-              hash[job_name] += 1
+            log.debug 'Check if hist empty'
+            flag   = redis.get('notify:flag')
 
-              job_id = "#{job_name}_#{hash[job_name]}"
+            # Scheduler
+            if flag == 'true'
+              client.job.list_all_with_details.each do |job|
+                unless ['disabled', 'notbuilt'].include?(job['color'])
+                  client.job.get_builds(job['name']).each do |build|
 
-              begin
-                log.debug "#{job_id} Getting build info for url /job/#{job_name}/#{hash[job_name]}/api/json"
+                    queue = redis.lrange "notify:queue:#{job['name']}", 0, -1
+                    hist  = redis.lrange "notify:hist:#{job['name']}", 0, -1
+                    numb  = build['number'].to_s
 
-                build = client.api_get_request("/job/#{job_name}/#{hash[job_name]}/api/json")
-              rescue JenkinsApi::Exceptions::NotFound => e
-                log.debug "#{job_id} Build info not found, will skip"
-                redis.set('notify', hash.to_json)
-
-                log.debug "#{job_id} Again run process_job"
-                process_job(hash, job_name, last_build, client) if hash[job_name] < last_build
-
-                return
-              rescue Exception => e
-                log.error "#{job_id} Can't get build info bcs: #{e.message}"
-
-                return
-              end
-
-              if build['building']
-                log.debug "#{job_id} Job in building state will skip"
-                return
-              end
-
-              cause      = build['actions'].select { |e| e['_class'] == 'hudson.model.CauseAction' }
-              user_cause = cause.first['causes'].select { |e| e['_class'] == 'hudson.model.Cause$UserIdCause' }.first
-
-              unless user_cause.nil?
-                log.debug "#{job_id} Job cause by user #{user_cause['userId']}"
-
-                user         = user_cause['userId'].split('@').first
-                runned       = build['displayName']
-                build_number = hash[job_name]
-                started      = build['timestamp']
-                duration     = build['duration']
-                result       = build['result']
-                url          = build['url']
-
-                debug_text = {
-                  user: user,
-                  runned: runned,
-                  build_number: build_number,
-                  started: started,
-                  duration: duration,
-                  result: result,
-                  url: url
-                }
-                log.debug "#{job_id} #{debug_text}"
-
-                unless notify_mode = redis.get("#{user}:notify")
-                  log.debug "#{job_id} No notify mode choosen for user"
-                  redis.set("#{user}:notify", 'false')
-
-                  log.debug "#{job_id} Set notify mode false"
-                  notify_mode = 'false'
+                    if queue.include?(numb)
+                      log.debug "#{job['name']}:#{numb} already in queue"
+                    elsif hist.include?(numb)
+                      log.debug "#{job['name']}:#{numb} already in hist"
+                    else
+                      log.debug "#{job['name']}:#{numb} push to queue"
+                      redis.rpush "notify:queue:#{job['name']}", numb
+                    end
+                  end
                 end
+              end
+            else
+              client.job.list_all_with_details.each do |job|
+                unless ['disabled', 'notbuilt'].include?(job['color'])
+                  client.job.get_builds(job['name']).each do |build|
+                    log.debug "#{job['name']}:#{build['number']} push to hist"
+                    redis.rpush "notify:hist:#{job['name']}", build['number']
+                  end
+                end
+              end
+              redis.set('notify:flag', 'true')
+            end
 
-                if notify_mode == 'true'
-                  log.debug "#{job_id} Notify mode true will notify"
+            # Worker
+            jobs_in_queue = redis.keys('notify:queue:*')
+            if jobs_in_queue.empty?
+              log.info 'Notify: No jobs in queue'
+            else
+              jobs_in_queue.each do |job|
+                def process_job(build_number, job_name)
+                  job_id = "#{job_name}:#{build_number}"
 
-                  if result == 'SUCCESS'
-                    color = 'good'
-                  elsif result == 'FAILURE'
-                    color = 'danger'
-                  else
-                    color = 'warning'
+                  url = "/job/#{job_name}/#{build_number}/api/json"
+                  log.debug "#{job_id} Getting build info for url #{url}"
+
+                  begin
+                    build = client.api_get_request(url)
+                  rescue JenkinsApi::Exceptions::NotFound
+                    log.debug "#{job_id} Build info not found, will skip"
+                    redis.rpush "notify:hist:#{job_name}", build_number
                   end
 
-                  started    = started.to_i / 1000
-                  duration   = duration.to_i / 1000
-                  time       = Time.at(started).strftime("%d-%m-%Y %H:%M:%S")
-                  text       = "Result for #{job_name} #{build_number} started on #{time} for #{runned} is #{result}\nDuration: #{duration} sec"
-                  attachment = Lita::Adapters::Slack::Attachment.new(
-                    text, {
-                      title: 'Build status',
-                      title_link: url,
-                      text: text,
-                      color: color
+                  if build['building']
+                    log.debug "#{job_id} Job is building will skip"
+                    redis.rpush "notify:queue_wait:#{job_name}", build_number
+                    return
+                  end
+
+                  cause      = build['actions'].select { |e| e['_class'] == 'hudson.model.CauseAction' }
+                  user_cause = cause.first['causes'].select { |e| e['_class'] == 'hudson.model.Cause$UserIdCause' }.first
+
+                  unless user_cause.nil?
+                    log.debug "#{job_id} Job cause by user #{user_cause['userId']}"
+
+                    user     = user_cause['userId'].split('@').first
+                    runned   = build['displayName']
+                    started  = build['timestamp']
+                    duration = build['duration']
+                    result   = build['result']
+                    url      = build['url']
+
+                    debug_text = {
+                      user: user,
+                      runned: runned,
+                      build_number: build_number,
+                      started: started,
+                      duration: duration,
+                      result: result,
+                      url: url
                     }
-                  )
-                  lita_user = Lita::User.find_by_mention_name(user)
-                  log_text  = {for_user: user, message: text}
-                  log.info "#{job_id} #{log_text}"
-                  robot.chat_service.send_attachment(lita_user, attachment)
-                end
-              end
-              log.debug "#{job_id} Finished"
-              redis.set('notify', hash.to_json)
-              log.debug "#{job_id} Hash saved to redis"
+                    log.debug "#{job_id} #{debug_text}"
 
-              if hash[job_name] < last_build
-                log.debug "#{job_id} Still #{hash[job_name]} < #{last_build}. Will run process_job again."
-                process_job(hash, job_name, last_build, client)
-              end
-            end
+                    unless notify_mode = redis.get("#{user}:notify")
+                      log.debug "#{job_id} No notify mode choosen for user"
+                      redis.set("#{user}:notify", 'false')
 
-            log.debug 'Start getting jobs'
-            client.job.list_all_with_details.each do |jjob|
-              unless jjob['color'] == 'disabled' || jjob['color'] == 'notbuilt'
-                log.debug "Job color is #{jjob['color']}. Will work on it."
+                      log.debug "#{job_id} Set notify mode false"
+                      notify_mode = 'false'
+                    end
 
-                begin
-                  last_build = client.job.get_builds(jjob['name']).first['number']
-                rescue Exception => e
-                  log.error "Can't get last_build bcs: #{e.message}"
-                  next
-                end
+                    if notify_mode == 'true'
+                      log.debug "#{job_id} Notify mode true will notify"
 
-                if hash[jjob['name']]
-                  log.debug "#{jjob['name']} already in hash"
+                      if result == 'SUCCESS'
+                        color = 'good'
+                      elsif result == 'FAILURE'
+                        color = 'danger'
+                      else
+                        color = 'warning'
+                      end
 
-                  if hash[jjob['name']] < last_build
-                    log.debug "#{hash[jjob['name']]} < #{last_build}. Will process_job"
-                    process_job(hash, jjob['name'], last_build, client)
+                      started    = started.to_i / 1000
+                      duration   = duration.to_i / 1000
+                      time       = Time.at(started).strftime("%d-%m-%Y %H:%M:%S")
+                      text       = "Result for #{job_name} #{build_number} started on #{time} for #{runned} is #{result}\nDuration: #{duration} sec"
+                      attachment = Lita::Adapters::Slack::Attachment.new(
+                        text, {
+                          title: 'Build status',
+                          title_link: url,
+                          text: text,
+                          color: color
+                        }
+                      )
+                      lita_user = Lita::User.find_by_mention_name(user)
+                      debug_text  = {for_user: user, message: text}
+                      log.debug "#{job_id} #{debug_text}"
+                      robot.chat_service.send_attachment(lita_user, attachment)
+                    end
+                  else
+                    log.debug "#{job_id} Triggered not by user, will skip"
                   end
-                else
-                  log.debug "No #{jjob['name']} in hash"
-                  hash[jjob['name']] = last_build
-                  log.debug "#{last_build} as hash value"
-                  redis.set('notify', hash.to_json)
-                  log.debug 'Hash saved to redis'
+
+                  log.debug "#{job_id} Finished"
+                  redis.rpush "notify:hist:#{job_name}", build_number
+                end
+
+                job_name = job.split(':').last
+
+                build_number = redis.lpop "notify:queue_wait:#{job_name}"
+                until build_number.nil?
+                  process_job(build_number, job_name)
+                  build_number = redis.lpop "notify:queue_wait:#{job_name}"
+                end
+
+                build_number = redis.lpop job
+                until build_number.nil?
+                  process_job(build_number, job_name)
+                  build_number = redis.lpop job
                 end
               end
             end
