@@ -52,31 +52,55 @@ module Lita
 
             # Scheduler
             if flag == 'true'
-              client.job.list_all_with_details.each do |job|
-                unless ['disabled', 'notbuilt'].include?(job['color'])
-                  client.job.get_builds(job['name']).each do |build|
+              begin
+                jobs = client.job.list_all_with_details
+              rescue Exception => e
+                log.debug "Can't get jobs due error: #{e.message} #{e.backtrace}"
+              end
 
-                    queue = redis.lrange "notify:queue:#{job['name']}", 0, -1
-                    hist  = redis.lrange "notify:hist:#{job['name']}", 0, -1
-                    numb  = build['number'].to_s
+              unless jobs.nil?
+                jobs.each do |job|
+                  unless ['disabled', 'notbuilt'].include?(job['color'])
+                    begin
+                      builds = client.job.get_builds(job['name'])
+                    rescue Exception => e
+                      log.debug "Can't get builds due error: #{e.message} #{e.backtrace}"
+                    end
 
-                    if queue.include?(numb)
-                      log.debug "#{job['name']}:#{numb} already in queue"
-                    elsif hist.include?(numb)
-                      log.debug "#{job['name']}:#{numb} already in hist"
-                    else
-                      log.debug "#{job['name']}:#{numb} push to queue"
-                      redis.rpush "notify:queue:#{job['name']}", numb
+                    unless builds.nil?
+                      builds.each do |build|
+
+                        queue = redis.lrange "notify:queue:#{job['name']}", 0, -1
+                        hist  = redis.lrange "notify:hist:#{job['name']}", 0, -1
+                        numb  = build['number'].to_s
+
+                        if queue.include?(numb)
+                          log.debug "#{job['name']}:#{numb} already in queue"
+                        elsif hist.include?(numb)
+                          log.debug "#{job['name']}:#{numb} already in hist"
+                        else
+                          log.debug "#{job['name']}:#{numb} push to queue"
+                          redis.rpush "notify:queue:#{job['name']}", numb
+                        end
+                      end
                     end
                   end
                 end
               end
             else
-              client.job.list_all_with_details.each do |job|
-                unless ['disabled', 'notbuilt'].include?(job['color'])
-                  client.job.get_builds(job['name']).each do |build|
-                    log.debug "#{job['name']}:#{build['number']} push to hist"
-                    redis.rpush "notify:hist:#{job['name']}", build['number']
+              begin
+                jobs = client.job.list_all_with_details
+              rescue Exception => e
+                log.debug "Can't get jobs due error: #{e.message} #{e.backtrace}"
+              end
+
+              unless jobs.nil?
+                jobs.each do |job|
+                  unless ['disabled', 'notbuilt'].include?(job['color'])
+                    client.job.get_builds(job['name']).each do |build|
+                      log.debug "#{job['name']}:#{build['number']} push to hist"
+                      redis.rpush "notify:hist:#{job['name']}", build['number']
+                    end
                   end
                 end
               end
