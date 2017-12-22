@@ -190,14 +190,6 @@ module Lita
 
                 job_name = job.split(':').last
 
-                # build_number = redis.lpop "notify:queue_wait:#{job_name}"
-                # until build_number.nil?
-                #   log.debug 'Sleep little bit because job is building'
-                #   sleep 30
-                #   process_job(build_number, job_name, client)
-                #   build_number = redis.lpop "notify:queue_wait:#{job_name}"
-                # end
-
                 build_number = redis.lpop job
                 until build_number.nil?
                   process_job(build_number, job_name, client)
@@ -206,7 +198,8 @@ module Lita
               end
             end
           rescue Exception => e
-            log.error "Error in notify thread: #{e}"
+            log.error "Error in notify thread: #{e.message} #{e.backtrace}"
+            sleep 60
             self.loop('again')
           end
         end
