@@ -285,7 +285,7 @@ module Lita
           return
         end
 
-        if params.keys.include?('MIGRATE') && params.keys.include?('ROLLBACK')
+        if params.keys.include?('DBMIGRATION') && params.keys.include?('DBROLLBACK')
           response.reply 'A U FCK KIDDING ME? Choose what you rly want migrate or rollback! :bad:'
           return
         end
