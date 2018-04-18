@@ -273,7 +273,7 @@ module Lita
               checkmaster = true
             elsif param.split(':').length == 2
               key, value = param.split(':')
-              value = value_map(value)
+              # value = value_map(value)
               params[key.upcase] = value
             else
               response.reply "Unknown param #{param}"
