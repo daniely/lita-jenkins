@@ -252,8 +252,8 @@ module Lita
           elsif base.length == 1
             project = base.first
           elsif base.length == 2
-            project = base.first
-            branch  = base.last
+            branch  = base.first
+            project = base.last
           else
             response.reply 'To many base params (before to)'
             return
