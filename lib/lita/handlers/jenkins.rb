@@ -234,7 +234,7 @@ module Lita
       def deploy(response)
         string = response.matches.last.reject(&:blank?).first #["OTT-123", "avia", "sandbox-15"]
         req_id = SecureRandom.uuid
-        log.info "[REQUEST:#{req_id}] #{string.inspect}"
+        log.info "[DEPLOY_REQUEST:#{req_id}] #{string.inspect}"
 
         project     = 'nil'
         branch      = 'nil'
@@ -294,13 +294,13 @@ module Lita
         job_params = {}
         username   = response.user.mention_name
 
-        log.info "[REQUEST:#{req_id}] branch:#{branch} project:#{project} stage:#{stage} params:#{params.inspect}"
+        log.info "[DEPLOY_REQUEST:#{req_id}] branch:#{branch} project:#{project} stage:#{stage} params:#{params.inspect}"
 
         projects = project.split(',')
         branches = branch.split(',')
         stages   = stage.split(',')
 
-        log.info "[REQUEST:#{req_id}] branches:#{branches} projects:#{projects} stages:#{stages}"
+        log.info "[DEPLOY_REQUEST:#{req_id}] branches:#{branches} projects:#{projects} stages:#{stages}"
 
         if branches.length > projects.length
           response.reply 'A U FCK KIDDING ME? Choose which branch you rly want to deploy! :bad:'
