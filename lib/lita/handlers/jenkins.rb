@@ -33,7 +33,7 @@ module Lita
         'jenkins b(uild) <job_name> param:value,param2:value2' => 'Builds the job specified by name'
       }
 
-      route /j(?:enkins)?(\W+)?d(?:eploy)?(\W+)?([\w\-\.]+)(\W+)?([\w\-\,]+)?(\W+)?to(\W+)?([\w\-]+)(\W+)?([\w]+)?/i, :deploy, command: true, help: {
+      route /j(?:enkins)?(\W+)?d(?:eploy)?(\W+)?(.+)/i, :deploy, command: true, help: {
         'jenkins d(eploy) <branch> <project1,project2> to <stage>' => 'Start dynamic deploy with params. Не выбранный бренч, зальет версию продакшна.'
       }
 
@@ -176,6 +176,7 @@ module Lita
                       notify_mode = 'false'
                     end
 
+                    # if ['true', 'direct', 'channel', 'smart'].include?(notify_mode)
                     if notify_mode == 'true'
                       log.debug "#{job_id} Notify mode true will notify"
 
@@ -230,112 +231,153 @@ module Lita
       end
 
       def deploy(response)
-        params     = response.matches.last.reject(&:blank?) #["OTT-123", "avia", "sandbox-15"]
-        project    = ''
-        branch     = ''
-        stage      = ''
-        flag       = nil
-        job_name   = 'dynamic_deploy'
-        job_params = {}
-        opts       = { 'build_start_timeout': 30 }
-        username   = response.user.mention_name
+        string = response.matches.last.reject(&:blank?).first #["OTT-123", "avia", "sandbox-15"]
+        puts string.inspect
 
-        if params.size == 3
-          branch  = params[0]
-          project = params[1]
-          stage   = params[2]
-        elsif params.size == 2
-          project = params[0]
-          stage   = params[1]
-        elsif params.size == 4
-          branch  = params[0]
-          project = params[1]
-          stage   = params[2]
-          flag    = params[3]
-        else
-          response.reply 'Something wrong with params :fire:'
-          return
-        end
+        project     = 'nil'
+        branch      = 'nil'
+        stage       = 'nil'
+        checkmaster = false
+        params      = {}
 
-        job_params = {
-          'STAGE' => stage,
-          'CHECKMASTER' => false,
-          'PROJECTS' => {}
-        }
+        core = string.split('to')
+        core.map! { |c| c.strip! }
 
-        project.split(',').each do |proj|
-          if flag.nil?
-            job_params['PROJECTS'][proj.upcase] = {
-              'ENABLE' => true,
-              'BRANCH' => branch
-            }
+        if core.length == 2
+          base = core.first.split
+
+          if base.empty?
+            response.reply 'No base params like project, branch and stage'
+            return
+          elsif base.length == 1
+            project = base.first
+          elsif base.length == 2
+            project = base.first
+            branch  = base.last
           else
-            if flag == 'migrate'
-              job_params['PROJECTS'][proj.upcase] = {
-                'ENABLE' => true,
-                'BRANCH' => branch,
-                'ExtraOpts' => {
-                  'DBMIGRATION' => true
-                }
-              }
-            elsif flag == 'rollback'
-              job_params['PROJECTS'][proj.upcase] = {
-                'ENABLE' => true,
-                'BRANCH' => branch,
-                'ExtraOpts' => {
-                  'DBROLLBACK' => true
-                }
-              }
+            response.reply 'To many base params (before to)'
+            return
+          end
+
+          params_array = core.last.split
+          stage        = params_array.shift
+
+          params_array.each do |param|
+            if param == 'migrate'
+              params['DBMIGRATION'] = true
+            elsif param == 'rollback'
+              params['DBROLLBACK'] = true
+            elsif param == 'checkmaster'
+              checkmaster = true
+            elsif param.split(':').length == 2
+              key, value = param.split(':')
+              value = value_map(value)
+              params[key.upcase] = value
             else
-              response.reply 'Something wrong with flag (it is a last param) :fire:'
+              response.reply "Unknown param #{param}"
               return
             end
           end
+        else
+          response.reply 'To many "to"'
+          return
         end
 
-        client = make_client(username)
+        if params.keys.include?('MIGRATE') && params.keys.include?('ROLLBACK')
+          response.reply 'A U FCK KIDDING ME? Choose what you rly want migrate or rollback! :bad:'
+          return
+        end
 
-        if client
-          begin
+        job_name   = 'dynamic_deploy'
+        job_params = {}
+        username   = response.user.mention_name
 
-            user_full = "#{username}@#{config.org_domain}"
-            token    = redis.get("#{username}:token")
-            reply_text = ''
+        puts "Result is: #{project} #{branch} #{stage} #{params.inspect}"
 
-            path = "https://#{config.server}/job/dynamic_deploy/build"
-            data = {
-              'json' => {
-                'parameter' => [
-                  {
-                    'name' => 'DEPLOY',
-                    'value' => job_params.to_json
-                  }
-                ]
-              }
-            }
-            encoded = URI.encode_www_form(data)
+        projects = project.split(',')
+        branches = branch.split(',')
+        stages   = stage.split(',')
 
-            http_resp = HTTP.basic_auth(user: user_full, pass: token)
-                            .headers(accept: 'application/json')
-                            .headers('Content-Type' => 'application/x-www-form-urlencoded')
-                            .post(path, body: URI.encode_www_form(data))
+        if branches.length > projects.length
+          response.reply 'A U FCK KIDDING ME? Choose which branch you rly want to deploy! :bad:'
+          return
+        elsif [projects.length, branches.length, stages.length].uniq.length == 1
+          stages.each do |s|
 
-            if http_resp.code == 201
-              last       = client.job.get_builds(job_name).first
-              reply_text = "Deploy started :rocket: for #{project} - <#{last['url']}console>"
-            elsif http_resp.code == 401
-              reply_text = ':no_mobile_phones: Unauthorized, check token or mention name'
-            else
-              log.info http_resp.inspect
-              reply_text = 'Unknown error'
+            if ['staging', 'production-b', 'production-a', 'production', 'selectel', 'extranet'].include?(s)
+              checkmaster = true
             end
 
-            response.reply reply_text
-          rescue Exception => e
-            response.reply "Deploy failed, check params :shia: #{e}"
+            job_params = {
+              'STAGE'       => s,
+              'CHECKMASTER' => checkmaster,
+              'PROJECTS'    => {}
+            }
+
+            projects.each_with_index do |proj, i|
+              bran = branches.first
+              bran = branches[i] if branches.length > 1
+
+              if params.empty?
+                job_params['PROJECTS'][proj.upcase] = {
+                  'ENABLE' => true,
+                  'BRANCH' => bran
+                }
+              else
+                job_params['PROJECTS'][proj.upcase] = {
+                  'ENABLE'    => true,
+                  'BRANCH'    => bran,
+                  'ExtraOpts' => params
+                }
+              end
+            end
+
+            client = make_client(username)
+
+            if client
+              begin
+
+                user_full  = "#{username}@#{config.org_domain}"
+                token      = redis.get("#{username}:token")
+                reply_text = ''
+
+                path = "https://#{config.server}/job/dynamic_deploy/build"
+                data = {
+                  'json' => {
+                    'parameter' => [
+                      {
+                        'name' => 'DEPLOY',
+                        'value' => job_params.to_json
+                      }
+                    ]
+                  }
+                }
+
+                http_resp = HTTP.basic_auth(user: user_full, pass: token)
+                                .headers(accept: 'application/json')
+                                .headers('Content-Type' => 'application/x-www-form-urlencoded')
+                                .post(path, body: URI.encode_www_form(data))
+
+                if http_resp.code == 201
+                  last       = client.job.get_builds(job_name).first
+                  reply_text = "Deploy started :rocket: for #{project} - <#{last['url']}console>"
+                elsif http_resp.code == 401
+                  reply_text = ':no_mobile_phones: Unauthorized, check token or mention name'
+                else
+                  log.info http_resp.inspect
+                  reply_text = 'Unknown error'
+                end
+
+                response.reply reply_text
+              rescue Exception => e
+                response.reply "Deploy failed, check params :shia: #{e}"
+              end
+            else
+              response.reply "Troubles with request, maybe token is'not set? Try run 'lita jenkins auth check_token'"
+            end
           end
         else
-          response.reply "Troubles with request, maybe token is'not set? Try run 'lita jenkins auth check_token'"
+          response.reply 'U broke me :alert:'
         end
       end
 
@@ -413,7 +455,7 @@ module Lita
         if mode.nil?
           current_mode = redis.get("#{username}:notify")
           response.reply "Current notify mode is `#{current_mode}`"
-        # elsif ['none', 'direct', 'channel', 'smart'].include?(mode)
+        # elsif ['false', 'direct', 'channel', 'smart'].include?(mode)
         elsif ['true', 'false'].include?(mode)
           redis.set("#{username}:notify", mode)
           response.reply ":yay: Notify mode `#{mode}` saved"
@@ -462,13 +504,13 @@ Last build: <#{job['lastBuild']['url']}>"
           false
         else
           JenkinsApi::Client.new(
-            server_ip: config.server,
+            server_ip:   config.server,
             server_port: '443',
-            username: "#{username}@#{config.org_domain}",
-            password: user_token,
-            ssl: true,
-            timeout: 60,
-            log_level: 3
+            username:    "#{username}@#{config.org_domain}",
+            password:    user_token,
+            ssl:         true,
+            timeout:     60,
+            log_level:   3
           )
         end
       end

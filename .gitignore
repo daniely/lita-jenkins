@@ -6,6 +6,7 @@ _yardoc
 .yardoc
 *.gem
 *.rbc
+.idea
 coverage
 doc/
 Gemfile.lock
