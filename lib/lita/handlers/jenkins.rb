@@ -305,7 +305,8 @@ module Lita
         if branches.length > projects.length
           response.reply 'A U FCK KIDDING ME? Choose which branch you rly want to deploy! :bad:'
           return
-        elsif [projects.length, branches.length, stages.length].uniq.length == 1
+        # elsif [projects.length, branches.length, stages.length].uniq.length == 1
+        elsif projects.length == branches.length
           stages.each do |s|
 
             if ['staging', 'production-b', 'production-a', 'production', 'selectel', 'extranet'].include?(s)
