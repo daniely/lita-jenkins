@@ -242,7 +242,7 @@ module Lita
         checkmaster = false
         params      = {}
 
-        core = string.split(' to ')
+        core = string.split(" to ")
         core.map! { |c| c.strip! }
 
         if core.length == 2
