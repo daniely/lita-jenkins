@@ -243,7 +243,7 @@ module Lita
         params      = {}
 
         core = string.split(' to ')
-        core.map! { |c| c.strip! }
+        core.map! { |c| c.strip }
 
         if core.length == 2
           base = core.first.split
