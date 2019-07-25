@@ -508,6 +508,10 @@ Last build: <#{job['lastBuild']['url']}>"
 
       private
 
+      def time_now_ms
+        (Time.now.to_f * 1000.0).to_i
+      end
+
       def try_find_job_url(start_time, job_name, username, stage)
         end_time = start_time + 10000
         job_url = nil
@@ -562,10 +566,6 @@ Last build: <#{job['lastBuild']['url']}>"
           ':ultrarage:'
         end
       end
-    end
-
-    def time_now_ms
-      (Time.now.to_f * 1000.0).to_i
     end
 
     Lita.register_handler(Jenkins)
