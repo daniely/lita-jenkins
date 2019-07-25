@@ -361,7 +361,7 @@ module Lita
                   }
                 }
 
-                start_time = (Time.now.to_f * 1000.0).to_i
+                start_time = time_now_ms
                 http_resp = HTTP.basic_auth(user: user_full, pass: token)
                                 .headers(accept: 'application/json')
                                 .headers('Content-Type' => 'application/x-www-form-urlencoded')
@@ -511,7 +511,7 @@ Last build: <#{job['lastBuild']['url']}>"
       def try_find_job_url(start_time, job_name, username, stage)
         end_time = start_time + 10000
         job_url = nil
-        while (Time.now.to_f * 1000.0).to_i < end_time do
+        while time_now_ms < end_time do
           jobs = client.job.get_builds(job_name, { tree: "builds[number,url,displayName,timestamp,actions[causes[userId]]]{0,20}" })
           jobs.each do |job|
             next if job['displayName'] != stage || job['timestamp'].to_i < start_time
@@ -562,6 +562,10 @@ Last build: <#{job['lastBuild']['url']}>"
           ':ultrarage:'
         end
       end
+    end
+
+    def time_now_ms
+      (Time.now.to_f * 1000.0).to_i
     end
 
     Lita.register_handler(Jenkins)
