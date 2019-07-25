@@ -361,14 +361,18 @@ module Lita
                   }
                 }
 
+                start_time = time_now_ms
                 http_resp = HTTP.basic_auth(user: user_full, pass: token)
                                 .headers(accept: 'application/json')
                                 .headers('Content-Type' => 'application/x-www-form-urlencoded')
                                 .post(path, body: URI.encode_www_form(data))
 
                 if http_resp.code == 201
-                  last       = client.job.get_builds(job_name).first
-                  reply_text = "Deploy started :rocket: for #{project} - <#{last['url']}console>"
+                  job_url    = try_find_job_url(start_time, job_name, username, s)
+                  unless job_url
+                    job_url  = client.job.get_builds(job_name).first['url']
+                  end
+                  reply_text = "Deploy started :rocket: for #{project} - <#{job_url}console>"
                 elsif http_resp.code == 401
                   reply_text = ':no_mobile_phones: Unauthorized, check token or mention name'
                 else
@@ -503,6 +507,29 @@ Last build: <#{job['lastBuild']['url']}>"
       end
 
       private
+
+      def time_now_ms
+        (Time.now.to_f * 1000.0).to_i
+      end
+
+      def try_find_job_url(start_time, job_name, username, stage)
+        end_time = start_time + 10000
+        job_url = nil
+        while time_now_ms < end_time do
+          jobs = client.job.get_builds(job_name, { tree: "builds[number,url,displayName,timestamp,actions[causes[userId]]]{0,20}" })
+          jobs.each do |job|
+            next if job['displayName'] != stage || job['timestamp'].to_i < start_time
+            causes = job['actions'].map { |act| act['causes'] }.compact.flatten
+            if causes.dig(0, 'userId') == "#{username}@#{config.org_domain}"
+              job_url = job['url']
+              break
+            end
+          end
+          break if job_url
+          sleep(3) # wait 3 seconds
+        end
+        job_url
+      end
 
       def make_client(username)
         log.info "Trying user - #{username}"
