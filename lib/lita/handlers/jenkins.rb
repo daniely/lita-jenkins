@@ -368,7 +368,7 @@ module Lita
                                 .post(path, body: URI.encode_www_form(data))
 
                 if http_resp.code == 201
-                  job_url    = try_find_job_url(start_time, job_name, username, s)
+                  job_url    = try_find_job_url(client, start_time, job_name, username, s)
                   unless job_url
                     job_url  = client.job.get_builds(job_name).first['url']
                   end
@@ -512,7 +512,7 @@ Last build: <#{job['lastBuild']['url']}>"
         (Time.now.to_f * 1000.0).to_i
       end
 
-      def try_find_job_url(start_time, job_name, username, stage)
+      def try_find_job_url(client, start_time, job_name, username, stage)
         end_time = start_time + 10000
         job_url = nil
         while time_now_ms < end_time do
