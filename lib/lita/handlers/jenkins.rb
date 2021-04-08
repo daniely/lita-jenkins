@@ -271,6 +271,8 @@ module Lita
               params['DBROLLBACK'] = true
             elsif param == 'checkmaster'
               checkmaster = true
+            elsif param == 'restart_only'
+              params['RESTART_ONLY'] = true
             elsif param.split(':').length == 2
               key, value = param.split(':')
               # value = value_map(value)
